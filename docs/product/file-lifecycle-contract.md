@@ -191,6 +191,19 @@ Every operation starts with a server-side `requireUser` step that calls Clerk's 
 
 The storage provider never answers the question “may this User read this File?” It only receives a server-selected key after the database authorization check. Signed URLs are not persisted, logged, or returned from an unauthenticated route.
 
+### CSRF and same-origin checks
+
+When a TanStack Start server function or route uses cookie-backed Clerk authentication, require both the authenticated session and a Kairo CSRF check. For upload intent, upload completion, Canvas attachment, processing retry, view/download URL minting, export creation/status, File deletion, and account deletion:
+
+- require an `Origin` value that exactly matches the configured Kairo origin for the deployment; reject missing, cross-origin, and unlisted preview origins;
+- require `Sec-Fetch-Site: same-origin` when the browser supplies Fetch Metadata headers;
+- require a server-issued CSRF token in a non-cookie header, bound to the current session and checked with a constant-time comparison; rotate it with the session;
+- use `SameSite=Lax` or stricter session cookies, but treat cookie settings as defense in depth rather than the CSRF check;
+- do not use `Referer` alone as a fallback, and do not accept a token supplied in a URL or form field;
+- apply the same checks to URL-minting reads because a cross-site request could otherwise obtain a private bearer URL even without mutating a File.
+
+The direct Filebase PUT or GET URL is an object capability with a short expiry. It is not a Kairo CSRF token, does not prove the current User, and must never satisfy the CSRF or same-origin check for a TanStack Start operation. If a future server call uses bearer authentication instead of cookies, it still needs the normal authorization check; the CSRF requirement above applies whenever cookies authenticate the call.
+
 ## Upload contract
 
 The logical server operations are:
@@ -263,7 +276,7 @@ Validate at intent, completion, and processing. The later checks inspect bytes a
 - Require a `%PDF-` signature in the first 1,024 bytes and parse the complete object with the pinned PDF.js version. The signature check is an early filter, not proof of a valid PDF.
 - Read at most 25 MiB and enforce 500 pages after parsing. Reject encrypted/password-required PDFs in v1 unless the product later adds a user-entered password flow; never store a password.
 - Extract with PDF.js `getTextContent` per page. Preserve page numbers and item order. Do not run OCR. A PDF with no selectable text is still `ready` for viewing with `extractionState: "empty"`.
-- Set `stopAtErrors: true`, leave `enableXfa: false`, disable annotation and form rendering, and do not use a generic viewer that executes PDF actions. Render only the page canvas and an optional text layer. Do not load remote resources named by the PDF.
+- Set `stopAtErrors: true`, `isEvalSupported: false`, leave `enableXfa: false`, disable annotation and form rendering, and do not use a generic viewer that executes PDF actions. Render only the page canvas and an optional text layer. Do not load remote resources named by the PDF.
 - A deterministic parse error or page-limit violation is `rejected`. A worker timeout, memory failure, or provider read failure is `failed` and can retry.
 
 No v1 file is declared safe merely because its extension or MIME header looks right. A future malware scanner may be inserted between verification and parsing; it must preserve the same `processing`/`rejected` states and never expose scan results as model instructions.
@@ -300,7 +313,7 @@ The source remains Markdown. Kairo does not store generated HTML and does not ca
 
 ### PDF view
 
-Use PDF.js display APIs in an app-owned viewer. Load the short-lived Filebase GET URL with range requests and a configured CORS response (`Accept-Ranges`, `Content-Length`, `Content-Range`, and `Content-Type`). Render pages to canvas, use a text layer for selection/search, and keep annotation mode disabled. The viewer has page count, page navigation, zoom, loading, and parse-error states; it does not expose arbitrary PDF actions or XFA forms.
+Use PDF.js display APIs in an app-owned viewer. Load the short-lived Filebase GET URL with range requests and a configured CORS response (`Accept-Ranges`, `Content-Length`, `Content-Range`, and `Content-Type`). Pass `isEvalSupported: false` and keep `enableXfa: false`; render pages to canvas, use a text layer for selection/search, and keep annotation and form modes disabled. The viewer has page count, page navigation, zoom, loading, and parse-error states; it does not expose arbitrary PDF actions or XFA forms.
 
 Do not proxy a full PDF through a Vercel Function. If a browser cannot use range requests against the provider URL, use an authenticated range proxy with each response kept below 4.5 MB or move the provider adapter; do not silently increase the upload or response limit.
 
@@ -428,6 +441,7 @@ Implement these tests before calling the File path complete. Use a fake `FileSto
 - Completion is idempotent; a replay cannot replace an existing key or publish a second processing job.
 - A size or checksum mismatch rejects and deletes the object. A missing object is not marked `ready`.
 - A Filebase 403 quota error stops retries and produces a typed recovery state; a 503 retries with the same job id.
+- A cookie-authenticated cross-site or missing-CSRF request is rejected for upload intent/completion, attachment, retry, view/download URL minting, export, and delete; a Filebase presigned URL cannot bypass that check.
 
 ### Markdown
 
@@ -444,7 +458,8 @@ Implement these tests before calling the File path complete. Use a fake `FileSto
 - A valid scanned/image-only PDF becomes `ready` with `empty` extraction and remains viewable without OCR.
 - A bad header, malformed structure, password-protected fixture, oversized PDF, and PDF over 500 pages never become `ready`.
 - A parser timeout or worker crash becomes retryable `failed` and keeps the original quarantined.
-- PDF.js renders a page and text layer, uses range requests, and does not render annotations, forms, XFA, or actions.
+- PDF.js renders a page and text layer with `isEvalSupported: false`, uses range requests, and does not render annotations, forms, XFA, or actions.
+- A hostile-PDF fixture containing JavaScript actions or embedded script is opened with `isEvalSupported: false`; no script runs, no external request is made, and annotation, form, and XFA layers remain disabled.
 - Invalid or expired signed URLs produce the viewer's safe error state, not a provider error dump.
 
 ### Grounding, Clarification, and Canvas
