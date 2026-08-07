@@ -4,9 +4,9 @@ Research date: 7 August 2026
 
 ## Short answer
 
-Use Cloudflare R2 through one Effect `FileStorage` adapter. R2 buckets are private by default, presigned URLs grant time-limited access, egress is free on every plan, and the free tier (10 GB-month, 1 million Class A and 10 million Class B operations per month) renews each month. It requires a billing account and charges overage. Backblaze B2 is the fallback: same S3 mechanics, 10 GB always free, but egress is only free up to 3x average monthly storage.
+Use Filebase through one Effect `FileStorage` adapter. Its free tier has 5 GB pooled storage, 5 GB/month S3 bandwidth, 1 million Class A and 10 million Class B operations, one private bucket, and no credit card. When free storage or bandwidth is exceeded, Filebase switches the free account to read-only instead of billing overage. Vercel Blob is the fallback when its Vercel-native integration matters more than the extra capacity.
 
-Vercel Blob, UploadThing, Convex File Storage, and Supabase Storage are all usable but weaker fits: UploadThing's free plan cannot keep files private, Convex and Supabase each mean adopting a second data platform, and Vercel Blob's free limits are much smaller than R2's and hard-stop access when exceeded.
+Cloudflare R2 and Backblaze B2 remain good paid-capacity options, but both require a billing account and can bill overage. UploadThing's free plan cannot keep files private, Convex and Supabase each mean adopting a second data platform, and Vercel Blob's free limits are smaller than Filebase's.
 
 ## What counts as durable free
 
@@ -14,6 +14,7 @@ A durable free tier keeps renewing instead of ending with a trial or one-time cr
 
 - R2: free amounts renew every month, and overage is billed. Enabling R2 requires completing Cloudflare's subscription checkout and keeping a payment method on the billing account. It is not a trial.
 - Backblaze B2: 10 GB storage "always free", overage billed.
+- Filebase: 5 GB storage, 5 GB/month S3 bandwidth, 1 million Class A operations, 10 million Class B operations, and one bucket. No credit card is required. Storage or bandwidth over the free allowance makes the account read-only; Filebase does not bill free-tier overage.
 - Vercel Blob Hobby: free within 1 GB storage, 10,000 simple operations, 2,000 advanced operations, and 10 GB data transfer per month. Overage is not billed; Blob becomes inaccessible when a limit is exceeded, and Vercel says the user must wait 30 days to use it again.
 - UploadThing free: 2 GB storage shared across all apps, unlimited uploads and downloads, 7-day audit log. Durable but small.
 - Convex free: 1 GB file storage, 1 GB/month egress, 1 million function calls/month total, all hard-capped; hitting a cap fails operations, nothing is billed.
@@ -25,6 +26,7 @@ A hard-to-guess URL is not privacy. Real privacy means an unauthenticated reques
 
 - R2: private by default ("Bucket names and buckets are not public by default"). Presigned URLs for GET, HEAD, PUT, DELETE, valid 1 second to 7 days. Unauthorized requests return 401 and are not billed.
 - B2: buckets are private unless explicitly made public. Presigned URLs for download and upload via the S3 API.
+- Filebase: free accounts can create private buckets, and private is the default. Presigned URLs grant one operation on one object for a chosen expiry; free accounts do not get public bucket URLs.
 - Vercel Blob: private stores and signed URLs are available on every plan. Since June 2026, signed URLs can grant one `GET`, `HEAD`, `PUT`, or `DELETE` operation on one path for up to 7 days, so files no longer need to pass through a server function.
 - UploadThing: files are public by URL on every plan unless the app ACL is set to `private`; the docs say private ACLs and regions are only available on paid plans. The free 2 GB plan cannot keep files private.
 - Convex: `storage.getUrl()` returns a URL that "anyone with the URL can access the file without another app-level authorization check"; the only revocation is deleting the file.
@@ -36,9 +38,19 @@ Kairo's metadata, ownership, and file records stay in Neon Postgres. A storage p
 
 - Convex is a reactive database plus backend runtime. Its file storage is a feature of that platform. Adopting it for files means adopting Convex for identity-adjacent state, auth integration, and function hosting, which is exactly the second data platform Kairo ruled out. Its bearer-URL file access would also require an app-level proxy for every download.
 - Supabase Storage lives inside a Supabase project, which is a hosted Postgres instance with its own auth. Using it for files alone still means running a second database platform beside Neon, duplicating ownership and access logic in Supabase policies. The constraint says not to add Supabase as a second database for file storage, and that stands.
-- R2, B2, and Vercel Blob are plain object stores. Files in, files out, no application logic. Kairo keeps all ownership and authorization in Neon and in TanStack Start server functions.
+- R2, B2, Filebase, and Vercel Blob are plain object stores. Files in, files out, no application logic. Kairo keeps all ownership and authorization in Neon and in TanStack Start server functions.
 
 ## Provider findings
+
+### Filebase
+
+- Free tier: 5 GB pooled storage, 5 GB/month S3-compatible bandwidth, 1 million Class A operations, 10 million Class B operations, one bucket, and one access-key pair. No credit card is required. Free-tier storage and bandwidth limits are hard caps; exceeding either makes writes or reads return `403` until the next month or an explicit upgrade. Failed and unauthorized requests are not charged.
+- Privacy: private buckets are supported on free accounts and are the default. Presigned `GET`, `PUT`, `HEAD`, and `DELETE` URLs work for temporary access. Public bucket access is paid-only.
+- Uploads: S3-compatible direct browser uploads, CORS, multipart uploads, 5 GB single PUT, 5 TB multipart total, and signed `Content-Length` constraints.
+- Deletion and export: S3 `DeleteObject`, `DeleteObjects`, `ListObjectsV2`, and standard AWS CLI/rclone tooling. Deletes are free operations.
+- Regions and runtime: one global S3 endpoint (`https://s3.filebase.io`, region `auto`), so there is no India-specific bucket region choice. The AWS SDK for JavaScript and ordinary S3 clients work from Vercel Node and Bun.
+- Durability and recovery: Filebase encrypts objects at rest and in transit, but custom versioning rules are not available; use immutable keys and keep Neon as the recovery and ownership record. The free tier is intended for evaluation and small projects, so revisit availability and support before a larger launch.
+- Sources: [Filebase free tier](https://filebase.com/free/), [Filebase pricing and hard caps](https://filebase.com/docs/account/pricing), [private buckets](https://filebase.com/docs/concepts/public-vs-private-buckets), [presigned URLs](https://filebase.com/docs/s3-api/presigned-urls), [service limits](https://filebase.com/docs/account/service-limits), [S3 API](https://filebase.com/docs/s3-api/overview).
 
 ### Cloudflare R2
 
@@ -64,7 +76,7 @@ Kairo's metadata, ownership, and file records stay in Neon Postgres. A storage p
 
 ### Vercel Blob
 
-- Free tier (Hobby): 1 GB storage, 10,000 simple operations, 2,000 advanced operations, and 10 GB data transfer per month. Overage is not billed; when a limit is exceeded the store becomes inaccessible, and Vercel says the user must wait 30 days to use it again. This is the weakest point for a free production app.
+- Free tier (Hobby): 1 GB storage, 10,000 simple operations, 2,000 advanced operations, and 10 GB data transfer per month. Overage is not billed; when a limit is exceeded the store becomes inaccessible, and Vercel says the user must wait 30 days to use it again. This is smaller than Filebase's free allowance.
 - Privacy: private stores and signed URLs are generally available on all plans. A URL can grant one `GET`, `HEAD`, `PUT`, or `DELETE` operation on one path for up to 7 days. A server proxy remains an option when every byte must pass through Kairo, but it is no longer required for private delivery.
 - Uploads: direct browser `PUT` through a signed URL supports multipart uploads. The absolute file limit is 5 TB; Vercel recommends multipart uploads above 100 MB.
 - Deletion: `del()` is free.
@@ -98,71 +110,72 @@ Kairo's metadata, ownership, and file records stay in Neon Postgres. A storage p
 
 ## Comparison table
 
-| | Cloudflare R2 | Backblaze B2 | Vercel Blob (Hobby) | UploadThing (Free) | Convex (Free) | Supabase (Free) |
-| --- | --- | --- | --- | --- | --- | --- |
-| Free storage | 10 GB-month | 10 GB | 1 GB | 2 GB | 1 GB | 1 GB |
-| Free egress | Unlimited (always) | Up to 3x storage/mo | 10 GB/mo | Unlimited | 1 GB/mo | 5 GB/mo |
-| Free ops | 1M Class A / 10M Class B /mo | Class A-C free | 10K simple / 2K advanced | Unlimited uploads/downloads | 1M function calls (shared) | Unlimited API requests |
-| Overage behavior | Billed | Billed | Blocked 30 days | Paid plan required for privacy | Hard stop | Hard stop / pause |
-| Private by default | Yes | Yes | Store-level | No (public URL) | No (bearer URL) | Policy-level |
-| Signed URLs | Yes (1s-7d) | Yes | Yes (up to 7d) | Paid plans only | No | Yes |
-| Browser upload | PUT presigned | PUT presigned | PUT presigned | Native | Upload URL | Native / TUS |
-| Deletion | Free op | Free op | Free op | SDK | Mutation | API |
-| Export | S3 tools | S3 tools | Dashboard/SDK | Limited | `convex export` | API/download |
-| Second data platform | No | No | No | No | Yes | Yes |
-| Max file size | 5 GiB/request | Approx. 10 GB (unverified) | 5 TB | Route-configurable | Unlimited | 50 MB free / 500 GB Pro |
+| | Filebase | Cloudflare R2 | Backblaze B2 | Vercel Blob (Hobby) | UploadThing (Free) | Convex (Free) | Supabase (Free) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Free storage | 5 GB | 10 GB-month | 10 GB | 1 GB | 2 GB | 1 GB | 1 GB |
+| Free egress | 5 GB/mo | Unlimited (always) | Up to 3x storage/mo | 10 GB/mo | Unlimited | 1 GB/mo | 5 GB/mo |
+| Free ops | 1M Class A / 10M Class B /mo | 1M Class A / 10M Class B /mo | Class A-C free | 10K simple / 2K advanced | Unlimited uploads/downloads | 1M function calls (shared) | Unlimited API requests |
+| Overage behavior | Read-only, no bill | Billed | Billed | Blocked 30 days | Paid plan required for privacy | Hard stop | Hard stop / pause |
+| Private by default | Yes | Yes | Yes | Store-level | No (public URL) | No (bearer URL) | Policy-level |
+| Signed URLs | Yes | Yes (1s-7d) | Yes | Yes (up to 7d) | Paid plans only | No | Yes |
+| Browser upload | PUT presigned | PUT presigned | PUT presigned | PUT presigned | Native | Upload URL | Native / TUS |
+| Deletion | Free op | Free op | Free op | Free op | SDK | Mutation | API |
+| Export | S3 tools | S3 tools | S3 tools | Dashboard/SDK | Limited | `convex export` | API/download |
+| Second data platform | No | No | No | No | No | Yes | Yes |
+| Max file size | 5 GB PUT / 5 TB multipart | 5 GiB/request | Approx. 10 GB (unverified) | 5 TB | Route-configurable | Unlimited | 50 MB free / 500 GB Pro |
 
 ## Recommendation
 
-**Use Cloudflare R2.** Reasons, in order of weight:
+**Use Filebase for the hackathon.** Reasons, in order of weight:
 
-1. Real privacy on the free tier: private by default, presigned URLs with short expiry, and unauthorized reads return 401.
-2. Durable free tier: monthly renewal, no trial, no hard stop; egress is free even past the free tier, which is the one cost that grows with real users.
-3. No second data platform: it is a plain object store; Neon stays the only database.
-4. Free deletion, cheap reads (10 million Class B reads/month), and standard S3 tooling for export and migration.
-5. Works from Vercel on Node or Bun with the AWS SDK; no provider SDK leaks into app code if one adapter owns it.
+1. Real privacy on the free tier: private by default, short-lived presigned URLs, and public buckets unavailable on free accounts.
+2. No billing setup and no surprise overage: the account becomes read-only when storage or bandwidth exceeds the free cap.
+3. 5 GB is five times Vercel Blob Hobby's storage allowance and enough for a small Markdown/PDF hackathon launch.
+4. No second data platform: it is a plain S3-compatible object store; Neon stays the only database.
+5. Free deletion, 1 million Class A and 10 million Class B operations, and standard S3 tooling for export and migration.
+6. Works from Vercel on Node or Bun with the AWS SDK; no provider SDK leaks into app code if one adapter owns it.
 
-**Fallback: Backblaze B2.** Same S3 mechanics and a genuine always-free 10 GB, but egress is capped at 3x average storage and browser uploads need CORS plus PUT presigned URLs (POST forms are unsupported). Choose it only if R2 becomes unavailable.
+**Fallback: Vercel Blob.** It has a smaller 1 GB cap and blocks access for 30 days after Hobby limits are crossed, but its private signed URLs and Vercel integration are first-party. Choose it if Filebase's global endpoint or free-tier availability is not acceptable.
 
-**Deliberately not chosen:** Vercel Blob (only 1 GB and a 30-day hard stop after crossing a free limit, though its private signed-URL support now meets Kairo's security needs), UploadThing (free plan cannot keep files private; 2 GB shared), Convex and Supabase (second data platforms with public-URL or policy-locked file models).
+**Paid-capacity options:** R2 remains the best option after we accept billing and want free egress beyond the cap. Backblaze B2 remains a portable S3 fallback with 10 GB storage but metered overage. UploadThing (free plan cannot keep files private), Convex, and Supabase remain rejected for Kairo's current constraints.
 
 ## Cost controls and the paid point
 
-R2 has no separate upgrade step: the first byte or operation beyond the monthly free allowance becomes usage-based billing. Standard storage beyond 10 GB-month costs $0.015 per GB-month, Class A operations beyond 1 million cost $4.50 per million, and Class B operations beyond 10 million cost $0.36 per million. Egress and deletes remain free.
+Filebase has the hard cap we want. Free storage is 5 GB, S3 bandwidth is 5 GB/month, Class A is 1 million/month, and Class B is 10 million/month. Storage or bandwidth overage makes the free account read-only, and Filebase does not bill it. Kairo should still track usage and show the user when uploads or downloads are nearing the cap. See [Filebase pricing](https://filebase.com/docs/account/pricing).
 
-Before launch, Kairo must set per-user byte, file-count, and upload-size quotas in Neon and reject an upload before minting its URL when it would cross a quota. Record daily account usage, alert well before 10 GB, and set Cloudflare budget alerts at low dollar amounts. Cloudflare's alerts are informational and do not cap spend, so the application quota is the hard cost control. Move from the free allowance to planned spend when stored data approaches 8 GB or forecast operations approach 80% of either free request limit; do not wait for the first invoice. See [R2 pricing](https://developers.cloudflare.com/r2/pricing/) and [Cloudflare budget alerts](https://developers.cloudflare.com/billing/manage/budget-alerts/).
+Before launch, Kairo must still set per-user byte, file-count, and upload-size quotas in Neon and reject an upload before minting its URL when it would cross a quota. Record daily account usage and alert well before 5 GB storage or bandwidth. The provider cap is the backstop; the app quota gives users a useful error before the account becomes read-only.
 
-If an absolute no-charge ceiling matters more than capacity, Vercel Blob Hobby is the safer fallback because it blocks overage. That trade replaces billing risk with a risk that all file access stops for 30 days.
+If the app outgrows 5 GB or 5 GB/month of reads, choose a paid plan or a planned migration. We should not attach billing automatically.
 
 ## Flows
 
 Authorization for every flow begins in a TanStack Start server function. The browser never sees provider credentials.
 
-**Upload.** The server function checks the Clerk session, browser-declared size, and the user's storage quota, creates a pending Neon record, then asks the `FileStorage` adapter for a short-lived presigned PUT URL for a server-chosen unique key (for example `users/{userId}/{fileId}`) with the content type pinned. The browser PUTs the file straight to R2. The completion function confirms the object with `HEAD`, rejects and deletes it if the real size or type is wrong, then marks the record ready. If completion fails, the object stays unreadable and cleanup reclaims it.
+**Upload.** The server function checks the Clerk session, browser-declared size, and the user's storage quota, creates a pending Neon record, then asks the `FileStorage` adapter for a short-lived presigned PUT URL for a server-chosen unique key (for example `users/{userId}/{fileId}`) with content type and size constraints. The browser PUTs the file straight to Filebase. The completion function confirms the object with `HEAD`, rejects and deletes it if the real size or type is wrong, then marks the record ready. If completion fails, the object stays unreadable and cleanup reclaims it.
 
 **Authorized view/download.** The server function checks ownership against Neon, then asks the adapter for a presigned GET URL with a short TTL (5 to 15 minutes) and the download filename attached. The browser loads or redirects to that URL. A file whose owner no longer exists never gets a URL.
 
-**Delete.** The server function checks ownership, deletes the Neon record, then deletes the object (free in R2). If object deletion fails, the record is gone and the object is reclaimed by cleanup; if record deletion fails, object deletion is skipped and the user sees an error.
+**Delete.** The server function checks ownership, deletes the Neon record, then deletes the object (free in Filebase). If object deletion fails, the record is gone and the object is reclaimed by cleanup; if record deletion fails, object deletion is skipped and the user sees an error.
 
-**Export.** Two levels: per-file downloads reuse the view flow, and a full export is a server function that mints a batch of short-lived GET URLs (for example 25 at a time) or documents the rclone/S3 copy command for account-level migration. R2 objects download as ordinary files over HTTPS.
+**Export.** Two levels: per-file downloads reuse the view flow, and a full export is a server function that mints a batch of short-lived GET URLs (for example 25 at a time) or documents the rclone/S3 copy command for account-level migration. Filebase objects download as ordinary files over HTTPS.
 
-**Orphan cleanup.** A nightly scheduled server function scans Neon for file records whose object was never confirmed, and for objects older than a cutoff that no longer match any record. R2 `ListObjects` (Class A) or per-key `HeadObject` (Class B) reveals the mismatch; `DeleteObject` is free. Lifecycle rules on the bucket can also expire objects by age as a second net.
+**Orphan cleanup.** A nightly scheduled server function scans Neon for file records whose object was never confirmed, and for objects older than a cutoff that no longer match any record. Filebase `ListObjects` (Class A) or per-key `HeadObject` (Class B) reveals the mismatch; `DeleteObject` is free. Abort incomplete multipart uploads as well, since unfinished parts count toward storage.
 
 ## Security, failure, and recovery rules
 
-- Mint upload URLs only after a Clerk check and quota check. The server chooses the key and pins the allowed method, content type, and short expiry. R2 presigned URLs do not document a signed maximum-size rule and remain reusable until expiry, so verify the stored size after upload, use a unique immutable key, and keep the pending object unreadable until validation. Never accept a user-supplied bucket key.
+- Mint upload URLs only after a Clerk check and quota check. The server chooses the key and pins the allowed method, content type, size range, and short expiry. Filebase supports signed content-length constraints; still verify the stored size after upload and use a unique immutable key. Never accept a user-supplied bucket key.
 - Keep a Neon file row in `pending` state before upload. After upload, verify the object with `HEAD`, compare size and stored checksum when available, then mark it `ready`. A timed-out or failed upload stays unreadable and cleanup removes it.
 - Allow only the document types Kairo supports. Check extension, declared type, and file signature; do not trust browser MIME data. Store new files as quarantined until a scan or safe parser accepts them. Do not render Markdown as raw HTML, and serve downloads with `X-Content-Type-Options: nosniff` and a safe `Content-Disposition`.
 - Make commands idempotent. A repeated completion, deletion, or cleanup request must reach the same state without creating a new object or exposing one user's file to another.
-- Use immutable object keys. R2 does not implement S3 bucket versioning, so overwriting a key destroys the old value and deletion cannot be undone through R2. An edit creates a new key and updates the Neon reference only after verification.
-- A user-requested delete must remove the live object and all Kairo metadata; do not keep a hidden recovery copy. For operator-error recovery, use a separate, documented backup policy and bucket or provider only after the user retention policy is set. R2's eleven-nines durability protects against storage loss, not intentional deletion.
+- Use immutable object keys. Filebase does not provide custom versioning rules, so overwriting a key destroys the old value and deletion cannot be undone through the free storage layer. An edit creates a new key and updates the Neon reference only after verification.
+- A user-requested delete must remove the live object and all Kairo metadata; do not keep a hidden recovery copy. For operator-error recovery, use a separate, documented backup policy and bucket or provider only after the user retention policy is set. Filebase's encryption and storage durability do not protect against intentional deletion.
 - Give runtime credentials access only to the one private bucket. Keep account-wide credentials out of the app, rotate keys, log storage commands without logging signed URLs, and make signed GET URLs short-lived bearer secrets.
 
 ## Effect FileStorage interface duties
 
 The interface is a contract, not code. Its duties:
 
-- `createUploadUrl`: given owner, file kind, content type, and declared size bounds, return a short-lived PUT URL and the unique key it targets; the contract must state that R2 URLs remain reusable until expiry and require post-upload size checks.
+- `createUploadUrl`: given owner, file kind, content type, and declared size bounds, return a short-lived PUT URL and the unique key it targets; the adapter should use Filebase's signed size constraint and still require post-upload checks.
 - `createDownloadUrl`: given a key, return a short-lived GET URL with optional filename and content disposition.
 - `delete`: given a key, remove the object.
 - `head` or `exists`: confirm an object and its size without downloading it.
@@ -174,9 +187,8 @@ The Neon schema owns identity: one file record per object, holding the key, owne
 
 ## Hackathon with real users
 
-Not acceptable to skip privacy. Kairo's files are a student's notes and PDFs; they are private by default even before anyone asks. UploadThing's free plan would publish every file under a URL, which the provider itself only calls "hard-to-guess," and its 2 GB shared cap would fail real use anyway. The privacy requirement is exactly why R2 (or B2) beats the friendlier upload SDKs: the free tier already has the private model built in, so there is no "make it private later" migration.
+Not acceptable to skip privacy. Kairo's files are a student's notes and PDFs; they are private by default even before anyone asks. UploadThing's free plan would publish every file under a URL, which the provider itself only calls "hard-to-guess." Filebase gives us private storage and a hard no-bill ceiling, so the hackathon does not need a public-file compromise.
 
 ## Facts not verified
 
-- UploadThing's absolute maximum file size per upload is not stated on the pages checked (per-route limits are).
 - Backblaze B2's maximum single-file size via the S3 API is given as approximately 10 GB but was not confirmed against a current page.
