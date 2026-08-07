@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 323 70" role="img" aria-labelledby="title description">
+  <title id="title">Kairo</title>
+  <desc id="description">Kairo primary logo with its blue five-drop mark.</desc>
+  <defs>
+    <path
+      id="drop"
+      d="M36 29.5C35.2 25.7 28 14.2 28 8.5C28 3.8 31.6 0 36 0C40.4 0 44 3.8 44 8.5C44 14.2 36.8 25.7 36 29.5Z"
+    />
+  </defs>
+
+  <g fill="#015DF0">
+    <use href="#drop" />
+    <use href="#drop" transform="translate(1 1) rotate(76 36 36)" />
+    <use href="#drop" transform="translate(1 2) rotate(144 36 36)" />
+    <use href="#drop" transform="translate(-1 2) rotate(216 36 36)" />
+    <use href="#drop" transform="translate(-1 1) rotate(284 36 36)" />
+  </g>
+
+  <g fill="#0D1426" transform="translate(124 3)">
+    <path d="M172 255 291 374 548 0H658L358 432 655 729H535L172 360V729H79V0H172Z" transform="translate(0 64) scale(.088083 -.087791) translate(-79)" />
+    <path d="M535 49C526 47 522 47 517 47C488 47 472 62 472 88V396C472 489 404 539 275 539C198 539 137 517 101 478C77 451 67 421 65 369H149C156 433 194 462 272 462C348 462 389 434 389 384V362C388 326 370 313 302 304C184 289 166 285 134 272C73 246 42 200 42 132C42 37 108-23 214-23C280-23 333 0 392 54C398 0 424-23 478-23C496-23 507-21 535-14ZM389 165C389 137 381 120 356 97C322 66 281 50 232 50C167 50 129 81 129 134C129 189 165 217 255 230C344 242 361 246 389 259Z" transform="translate(57 63.118) scale(.087221 -.081851) translate(-42)" />
+    <path d="M109 19H117V64H109ZM113 1A4.5 4.5 0 1 1 113 10A4.5 4.5 0 1 1 113 1Z" />
+    <path d="M69 524V0H153V272C154 398 206 454 321 451V536C307 538 299 539 289 539C235 539 194 507 146 429V524Z" transform="translate(127 64) scale(.095238 -.083488) translate(-69)" />
+    <path d="M272 539C124 539 36 434 36 258C36 81 124-23 273-23C421-23 510 82 510 254C510 436 424 539 272 539ZM273 462C367 462 423 385 423 255C423 131 365 54 273 54C180 54 123 131 123 258C123 385 180 462 273 462Z" transform="translate(155 63.118) scale(.092827 -.081851) translate(-36)" />
+  </g>
+</svg>

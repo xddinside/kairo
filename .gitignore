@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+
+# Build output and framework caches
+dist/
+dist-ssr/
+.output/
+.nitro/
+.tanstack/
+.vinxi/
+.wrangler/
+.vercel/
+.netlify/
+.cache/
+__unconfig*
+*.tsbuildinfo
+.eslintcache
+
+# Secrets and machine-local configuration
+.env
+.env.*
+!.env.example
+*.local
+*.pem
+*.key
+
+# Local databases and runtime storage
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+/uploads/
+
+# Tests and logs
+coverage/
+test-results/
+playwright-report/
+*.log
+
+# Editors and operating systems
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*.swo
+
+# Local agent and migration state
+.scratch/
+todos.json
