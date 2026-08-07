@@ -139,6 +139,18 @@ Kairo's metadata, ownership, and file records stay in Neon Postgres. A storage p
 
 **Paid-capacity options:** R2 remains the best option after we accept billing and want free egress beyond the cap. Backblaze B2 remains a portable S3 fallback with 10 GB storage but metered overage. UploadThing (free plan cannot keep files private), Convex, and Supabase remain rejected for Kairo's current constraints.
 
+## Filebase versus Vercel Blob
+
+Filebase is not equal to Vercel Blob on every axis:
+
+- **Private-read latency:** Filebase says private S3 requests bypass its edge cache, and presigned responses vary because the signature is part of the cache key. That can mean more origin reads. Vercel Blob exposes 20 selectable regions and a CDN cache, so it has the stronger delivery story for repeated reads. [Filebase caching](https://filebase.com/docs/concepts/cdn-and-caching), [Vercel regions and delivery](https://vercel.com/docs/vercel-blob)
+- **Integration work:** Vercel Blob is managed from the Vercel dashboard and its OIDC tokens rotate automatically inside Vercel. Filebase needs an S3 client, access-key pair, bucket setup, and CORS configuration in our adapter. [Vercel OIDC](https://vercel.com/changelog/vercel-blob-now-supports-oidc-authentication), [Filebase S3 API](https://filebase.com/docs/s3-api/overview)
+- **Free delivery allowance:** Filebase caps S3 bandwidth at 5 GB/month; Vercel Blob Hobby includes 10 GB/month. Filebase gives us 5 GB storage, while Vercel gives 1 GB.
+- **Free-account limits:** Filebase allows one bucket and has no India-specific region choice. Vercel can create stores in 20 regions and supports more Vercel-native management.
+- **Portability:** Filebase uses a standard S3 endpoint, so export and provider replacement are simple. Vercel Blob uses its own SDK and API, so its integration is easier inside Vercel but less portable.
+
+For Kairo's workload, files belong to one user and are usually read by that same user, so shared CDN cache hits are not the main performance win. Filebase should be fine for the hackathon, but the first implementation should measure upload and private-preview latency from India before we call it production-ready. If that check is poor, Vercel Blob is the clean fallback while retaining the same `FileStorage` boundary.
+
 ## Cost controls and the paid point
 
 Filebase has the hard cap we want. Free storage is 5 GB, S3 bandwidth is 5 GB/month, Class A is 1 million/month, and Class B is 10 million/month. Storage or bandwidth overage makes the free account read-only, and Filebase does not bill it. Kairo should still track usage and show the user when uploads or downloads are nearing the cap. See [Filebase pricing](https://filebase.com/docs/account/pricing).
