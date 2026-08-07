@@ -2,6 +2,9 @@
 
 Research date: 7 August 2026
 
+> Update: the focused [database platform comparison](./database-platform-comparison.md)
+> records why Neon Postgres replaced the first Supabase recommendation.
+
 ## Decision
 
 Use this production baseline:
@@ -12,12 +15,12 @@ Use this production baseline:
 | Production app runtime | Node.js 24 LTS on Vercel Pro through TanStack Start's Nitro Vercel output |
 | App boundary | Authenticated TanStack Start server functions and server routes |
 | Identity | Clerk's TanStack React Start SDK; Clerk stays the identity source |
-| Relational data | Supabase-managed PostgreSQL |
-| Schema and migrations | Declarative SQL plus reviewed, timestamped Supabase CLI migrations |
-| App data client | A per-request, typed Supabase client carrying the Clerk session token |
+| Relational data | Neon-managed PostgreSQL |
+| Schema and migrations | Drizzle schema plus reviewed, checked-in SQL migrations |
+| App data client | Drizzle over a Neon pooled or serverless connection, used only on the server |
 | Documents | Private Amazon S3 buckets, reached through short-lived presigned URLs |
-| Error and trace monitoring | Sentry's TanStack Start SDK, Vercel runtime logs, and Supabase database reports |
-| Database recovery | Supabase PITR plus independent encrypted logical dumps |
+| Error and trace monitoring | Sentry's TanStack Start SDK, Vercel runtime logs, and Neon database metrics |
+| Database recovery | Neon instant restore plus independent encrypted logical dumps |
 | File recovery | S3 Versioning, lifecycle rules, and cross-Region replication |
 
 This choice keeps Kairo portable. PostgreSQL and S3 are standard interfaces, while TanStack Start's Node output can move to a container host if the Vercel adapter becomes a problem.
@@ -30,15 +33,15 @@ Treat Nitro as a watched dependency. Its Vite integration remains under active d
 
 All private reads and writes should cross a TanStack Start server function. Webhooks, health checks, and scheduled jobs should use server routes. Add both Clerk request middleware and TanStack Start's CSRF middleware in `src/start.ts`; defining this file removes Start's implicit CSRF setup. Check authentication again on every private server function because route guards protect navigation, not the endpoint.
 
-Keep secrets, database clients, S3 signing, model calls, and command handlers in `*.server.ts` modules. Do not place a Supabase service-role key, AWS credentials, or model key in a browser bundle. Authenticated responses should use `Cache-Control: private` or `no-store`.
+Keep secrets, database clients, S3 signing, model calls, and command handlers in `*.server.ts` modules. Do not place database credentials, AWS credentials, or model keys in a browser bundle. Authenticated responses should use `Cache-Control: private` or `no-store`.
 
 ## Identity and per-user authorization
 
 Use `@clerk/tanstack-react-start`. Clerk supplies Google sign-in and email links and exposes verified auth state to Start middleware and server functions.
 
-Supabase has first-class support for Clerk tokens. Build a Supabase client per request with the publishable key and the current Clerk access token. Do not use the service role for normal app requests.
+Every server function must get the verified Clerk user ID and pass it to an owner-scoped command. Do not trust an owner ID sent by the browser.
 
-Every user-owned table should have a non-null `owner_id text` whose value is Clerk's `sub` claim. Enable row-level security and add both `USING` and `WITH CHECK` policies based on `auth.jwt()->>'sub'`. Default-deny any table without a policy. Automated authorization tests must prove that user A cannot select, insert, update, or delete user B's rows.
+Every user-owned table should have a non-null `owner_id text` whose value is Clerk's user ID. Use a non-owner runtime database role and enable row-level security. Put the verified user ID into transaction-local Postgres context and use it in both `USING` and `WITH CHECK` policies. Default-deny any table without a policy. Automated authorization tests must prove that user A cannot select, insert, update, or delete user B's rows. Neon RLS can validate Clerk JWTs directly, but this provider-specific path is not needed while TanStack Start stays the only private data boundary.
 
 Create a small local profile row lazily on the first authenticated request. Store only Kairo-owned settings there; read name, email, and avatar from Clerk. Clerk warns that webhook copies are eventually consistent and unnecessary when session data is enough. A verified, idempotent `user.deleted` webhook should start account erasure, but sign-in and onboarding must not wait for a webhook.
 
@@ -46,16 +49,16 @@ Canvas and stable routes must call the same server-side commands. Each mutation 
 
 ## Database, schema, and migrations
 
-Use one Supabase project per environment: local, staging, and production. Never connect a preview deployment to production data.
+Use local Postgres for development, an isolated Neon branch for each preview, and protected staging and production branches. Never connect a preview deployment to production data or copy private notes into a preview.
 
-Keep PostgreSQL definitions, constraints, indexes, functions, triggers, and row policies in `supabase/schemas/`. Generate and commit timestamped SQL in `supabase/migrations/`, then generate TypeScript database types with the Supabase CLI. Do not add Drizzle as a second schema authority. Kairo needs SQL policies and atomic database functions, and the Supabase CLI already owns their full lifecycle.
+Keep Drizzle schema declarations and generated timestamped SQL migrations in Git. Review the SQL, including constraints, indexes, functions, triggers, and row policies. Use a direct, unpooled URL for migrations and a pooled or serverless connection for app traffic.
 
 The migration gate should:
 
-1. Rebuild a local database from zero with `supabase db reset`.
+1. Rebuild a clean local Postgres database from zero.
 2. Run schema, authorization, and integration tests.
-3. Generate types and fail if the committed output changes.
-4. Run `supabase db push --dry-run` against the target.
+3. Generate migrations and fail if the committed output changes.
+4. Apply the migration set to an isolated Neon preview branch.
 5. Apply migrations once, outside the app startup path, before deploying code that needs them.
 
 Use expand-and-contract changes for live tables. Never reset production, edit its schema in the dashboard, or include seed data in a production push. Product fixtures may exist only in tests and local development.
@@ -78,7 +81,7 @@ Supabase Storage is not the primary recommendation because its database backups 
 
 ## Deployment and scheduled work
 
-Use Vercel Pro for production and separate Clerk, Supabase, Sentry, and AWS settings for preview/staging and production. Protect production environment secrets and require the test, migration, build, and preview smoke gates before release.
+Use Vercel Pro for production and separate Clerk, Neon, Sentry, and AWS settings for preview, staging, and production. Protect production environment secrets and require the test, migration, build, and preview smoke gates before release.
 
 Use a database outbox for browser reminders, document cleanup, account erasure, and other scheduled work. A secured Vercel Cron route may claim due rows with a lease and process them in small batches. Vercel does not retry failed cron calls and may deliver one more than once, so every worker needs a unique delivery key, idempotent handlers, bounded retries in the outbox, and an alert for stale work.
 
@@ -86,7 +89,7 @@ Use a database outbox for browser reminders, document cleanup, account erasure, 
 
 Use Sentry on both browser and server builds for errors, release-linked source maps, and traces. Add spans around server functions, database calls, file signing, and generated-view work. Do not record prompts, notes, document text, access tokens, signed URLs, or model input/output in logs or traces.
 
-Use Vercel logs for requests and cron calls and Supabase reports for connection count, slow queries, and database health. Alert on:
+Use Vercel logs for requests and cron calls and Neon metrics for connection count, slow queries, and database health. Alert on:
 
 - elevated server or client error rate;
 - authentication or row-policy failures;
@@ -95,7 +98,7 @@ Use Vercel logs for requests and cron calls and Supabase reports for connection 
 - stale outbox work;
 - failed or stale backups.
 
-Enable at least seven days of Supabase point-in-time recovery before accepting real users. In addition, run a nightly `supabase db dump` from a scheduled GitHub Actions workflow and write the encrypted dump to the replicated backup S3 bucket. Schedule away from the start of the hour, support manual dispatch, and alert if no fresh dump appears; GitHub notes that scheduled runs can be delayed or dropped.
+Enable a seven-day Neon restore window before accepting real users. In addition, run a nightly `pg_dump` through the direct database URL from a scheduled GitHub Actions workflow and write the encrypted dump to the replicated backup S3 bucket. Schedule away from the start of the hour, support manual dispatch, and alert if no fresh dump appears; GitHub notes that scheduled runs can be delayed or dropped.
 
 Restore tests are part of the design, not a later task. Each month, restore the newest database dump into an isolated project and sample file versions from the replica. Record the achieved recovery point and recovery time. A backup is not accepted until this drill succeeds.
 
@@ -116,9 +119,12 @@ Restore tests are part of the design, not a later task. Each month, restore the 
 - [Vercel Node.js 24 LTS runtime](https://vercel.com/changelog/node-js-24-lts-is-now-generally-available-for-builds-and-functions)
 - [Clerk's TanStack React Start quickstart](https://clerk.com/docs/tanstack-react-start/getting-started/quickstart)
 - [Clerk guidance on local user copies and webhooks](https://clerk.com/docs/guides/development/webhooks/syncing)
-- [Supabase's first-class Clerk integration and RLS](https://supabase.com/docs/guides/auth/third-party/clerk)
-- [Supabase local schema and migration workflow](https://supabase.com/docs/guides/local-development/cli-workflows)
-- [Supabase database backups and PITR](https://supabase.com/docs/guides/platform/backups)
+- [Neon serverless driver](https://neon.com/docs/serverless/serverless-driver)
+- [Neon connection pooling](https://neon.com/docs/connect/connection-pooling)
+- [Neon branching and Vercel previews](https://neon.com/docs/guides/branching-intro)
+- [Neon row-level security](https://neon.com/docs/guides/row-level-security)
+- [Clerk's Neon integration](https://clerk.com/docs/guides/development/integrations/databases/neon)
+- [Neon pricing and restore windows](https://neon.com/pricing)
 - [Supabase Storage S3 limits](https://supabase.com/docs/guides/storage/s3/compatibility)
 - [Amazon S3 presigned uploads and downloads](https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html)
 - [Amazon S3 security practices](https://docs.aws.amazon.com/AmazonS3/latest/userguide/security-best-practices.html)
