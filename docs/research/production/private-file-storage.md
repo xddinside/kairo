@@ -45,11 +45,13 @@ Kairo's metadata, ownership, and file records stay in Neon Postgres. A storage p
 - Free tier: 10 GB-month storage (Standard class only), 1 million Class A operations, 10 million Class B operations per month; egress is free on every plan, including beyond the free tier. Delete operations are free. Overage is billed; the free amounts renew monthly.
 - Privacy: buckets are private by default; presigned URLs (1 second to 7 days) for GET, HEAD, PUT, DELETE; CORS rules are configurable per bucket for browser uploads.
 - Uploads: direct browser PUT to a presigned URL; 5 GiB maximum single-part upload, up to 4.995 TiB multipart.
+- Upload constraint: R2 documents signing `Content-Type`, but not a maximum byte size, and a presigned URL can be reused until it expires. Kairo must use a unique key and very short TTL, check the browser-declared size before signing, verify the real size with `HEAD`, and delete an oversized or repeated upload before it becomes readable. If server-enforced pre-upload byte limits become mandatory, add a narrow upload gateway or reconsider Vercel Blob, whose signed PUT tokens support a maximum-size constraint.
 - Deletion: `DeleteObject` is a free operation.
 - Export: any S3 client (AWS CLI, rclone) can list, copy, or download the bucket; Super Slurper and Sippy exist for migrations.
-- Residency: automatic placement is the default. An optional location hint guides placement but does not guarantee it; an EU jurisdiction setting does guarantee that objects stay in the EU.
+- Residency: automatic placement is the default. Kairo can request the Asia-Pacific location hint for India latency, but a hint does not guarantee India residency. R2 offers a guaranteed EU jurisdiction, not an India jurisdiction.
+- Durability and recovery: R2 is designed for eleven-nines annual durability and uses strong consistency, but its S3 compatibility table marks bucket versioning and object locking as unimplemented. Hardware durability does not undo an accidental or malicious delete.
 - Vercel + Node/Bun: the S3 API is plain HTTPS; the AWS SDK for JavaScript v3 runs on Node and Bun. No Vercel-specific integration needed.
-- Sources: [R2 pricing](https://developers.cloudflare.com/r2/pricing/), [R2 setup](https://developers.cloudflare.com/r2/get-started/), [presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/), [create buckets](https://developers.cloudflare.com/r2/buckets/create-buckets/), [data location](https://developers.cloudflare.com/r2/reference/data-location/), [limits](https://developers.cloudflare.com/r2/platform/limits/).
+- Sources: [R2 pricing](https://developers.cloudflare.com/r2/pricing/), [R2 setup](https://developers.cloudflare.com/r2/get-started/), [presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/), [create buckets](https://developers.cloudflare.com/r2/buckets/create-buckets/), [data location](https://developers.cloudflare.com/r2/reference/data-location/), [limits](https://developers.cloudflare.com/r2/platform/limits/), [durability](https://developers.cloudflare.com/r2/reference/durability/), [S3 compatibility](https://developers.cloudflare.com/r2/api/s3/api/).
 
 ### Backblaze B2
 
@@ -124,11 +126,19 @@ Kairo's metadata, ownership, and file records stay in Neon Postgres. A storage p
 
 **Deliberately not chosen:** Vercel Blob (only 1 GB and a 30-day hard stop after crossing a free limit, though its private signed-URL support now meets Kairo's security needs), UploadThing (free plan cannot keep files private; 2 GB shared), Convex and Supabase (second data platforms with public-URL or policy-locked file models).
 
+## Cost controls and the paid point
+
+R2 has no separate upgrade step: the first byte or operation beyond the monthly free allowance becomes usage-based billing. Standard storage beyond 10 GB-month costs $0.015 per GB-month, Class A operations beyond 1 million cost $4.50 per million, and Class B operations beyond 10 million cost $0.36 per million. Egress and deletes remain free.
+
+Before launch, Kairo must set per-user byte, file-count, and upload-size quotas in Neon and reject an upload before minting its URL when it would cross a quota. Record daily account usage, alert well before 10 GB, and set Cloudflare budget alerts at low dollar amounts. Cloudflare's alerts are informational and do not cap spend, so the application quota is the hard cost control. Move from the free allowance to planned spend when stored data approaches 8 GB or forecast operations approach 80% of either free request limit; do not wait for the first invoice. See [R2 pricing](https://developers.cloudflare.com/r2/pricing/) and [Cloudflare budget alerts](https://developers.cloudflare.com/billing/manage/budget-alerts/).
+
+If an absolute no-charge ceiling matters more than capacity, Vercel Blob Hobby is the safer fallback because it blocks overage. That trade replaces billing risk with a risk that all file access stops for 30 days.
+
 ## Flows
 
 Authorization for every flow begins in a TanStack Start server function. The browser never sees provider credentials.
 
-**Upload.** The server function checks the Clerk session and the user's storage quota, then asks the `FileStorage` adapter for a presigned PUT URL for a server-chosen key (for example `users/{userId}/{fileId}`) with the content type pinned. The browser PUTs the file straight to R2. The server function then confirms the object exists (HEAD) and inserts the file record into Neon. If the record insert fails, the object is orphaned and the cleanup job below reclaims it.
+**Upload.** The server function checks the Clerk session, browser-declared size, and the user's storage quota, creates a pending Neon record, then asks the `FileStorage` adapter for a short-lived presigned PUT URL for a server-chosen unique key (for example `users/{userId}/{fileId}`) with the content type pinned. The browser PUTs the file straight to R2. The completion function confirms the object with `HEAD`, rejects and deletes it if the real size or type is wrong, then marks the record ready. If completion fails, the object stays unreadable and cleanup reclaims it.
 
 **Authorized view/download.** The server function checks ownership against Neon, then asks the adapter for a presigned GET URL with a short TTL (5 to 15 minutes) and the download filename attached. The browser loads or redirects to that URL. A file whose owner no longer exists never gets a URL.
 
@@ -138,11 +148,21 @@ Authorization for every flow begins in a TanStack Start server function. The bro
 
 **Orphan cleanup.** A nightly scheduled server function scans Neon for file records whose object was never confirmed, and for objects older than a cutoff that no longer match any record. R2 `ListObjects` (Class A) or per-key `HeadObject` (Class B) reveals the mismatch; `DeleteObject` is free. Lifecycle rules on the bucket can also expire objects by age as a second net.
 
+## Security, failure, and recovery rules
+
+- Mint upload URLs only after a Clerk check and quota check. The server chooses the key and pins the allowed method, content type, and short expiry. R2 presigned URLs do not document a signed maximum-size rule and remain reusable until expiry, so verify the stored size after upload, use a unique immutable key, and keep the pending object unreadable until validation. Never accept a user-supplied bucket key.
+- Keep a Neon file row in `pending` state before upload. After upload, verify the object with `HEAD`, compare size and stored checksum when available, then mark it `ready`. A timed-out or failed upload stays unreadable and cleanup removes it.
+- Allow only the document types Kairo supports. Check extension, declared type, and file signature; do not trust browser MIME data. Store new files as quarantined until a scan or safe parser accepts them. Do not render Markdown as raw HTML, and serve downloads with `X-Content-Type-Options: nosniff` and a safe `Content-Disposition`.
+- Make commands idempotent. A repeated completion, deletion, or cleanup request must reach the same state without creating a new object or exposing one user's file to another.
+- Use immutable object keys. R2 does not implement S3 bucket versioning, so overwriting a key destroys the old value and deletion cannot be undone through R2. An edit creates a new key and updates the Neon reference only after verification.
+- A user-requested delete must remove the live object and all Kairo metadata; do not keep a hidden recovery copy. For operator-error recovery, use a separate, documented backup policy and bucket or provider only after the user retention policy is set. R2's eleven-nines durability protects against storage loss, not intentional deletion.
+- Give runtime credentials access only to the one private bucket. Keep account-wide credentials out of the app, rotate keys, log storage commands without logging signed URLs, and make signed GET URLs short-lived bearer secrets.
+
 ## Effect FileStorage interface duties
 
 The interface is a contract, not code. Its duties:
 
-- `createUploadUrl`: given owner, file kind, content type, and size bounds, return a one-time short-lived PUT URL and the key it targets.
+- `createUploadUrl`: given owner, file kind, content type, and declared size bounds, return a short-lived PUT URL and the unique key it targets; the contract must state that R2 URLs remain reusable until expiry and require post-upload size checks.
 - `createDownloadUrl`: given a key, return a short-lived GET URL with optional filename and content disposition.
 - `delete`: given a key, remove the object.
 - `head` or `exists`: confirm an object and its size without downloading it.
