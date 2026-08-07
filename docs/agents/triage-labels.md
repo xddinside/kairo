@@ -8,4 +8,4 @@
 | `ready-for-human` | `ready-for-human` | Requires human work |
 | `wontfix` | `wontfix` | Will not be worked on |
 
-When a skill names a role, use the matching local label from this table.
+When a skill names a role, use the matching GitHub label from this table.
