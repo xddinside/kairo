@@ -85,7 +85,7 @@ export const isPrototypeRoute = (pathname: string): boolean =>
   pathname === "/proto" || pathname.startsWith("/proto/");
 
 export const isPrivateRoute = (pathname: string): boolean => {
-  if (pathname === "/") return true;
+  if (pathname === "/") return false;
   if (isPublicAuthRoute(pathname) || isPrototypeRoute(pathname)) return false;
 
   return privateRouteRoots.some(

@@ -102,8 +102,8 @@ describe("canonical origin and route guards", () => {
     expect(checkCanonicalOrigin(request("GET"), canonicalOrigin)).toEqual({ ok: true });
   });
 
-  it("protects production routes but leaves sign-in and prototypes outside the authority", () => {
-    expect(isPrivateRoute("/")).toBe(true);
+  it("protects workspace routes but leaves the landing page, sign-in, and prototypes public", () => {
+    expect(isPrivateRoute("/")).toBe(false);
     expect(isPrivateRoute("/canvas")).toBe(true);
     expect(isPrivateRoute("/courses/course-1")).toBe(true);
     expect(isPrivateRoute("/files/file-1")).toBe(true);

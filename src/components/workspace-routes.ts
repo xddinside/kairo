@@ -4,7 +4,6 @@ import {
   FrameCorners,
   ListChecks,
   NoteBlank,
-  Timer,
 } from "@phosphor-icons/react";
 
 /** Canvas plus the saved work collections, in the order every shell shows them. */
@@ -14,7 +13,6 @@ export const workspaceRoutes = [
   { to: "/tasks", label: "Tasks", icon: ListChecks },
   { to: "/timetable", label: "Timetable", icon: CalendarDots },
   { to: "/notes", label: "Notes", icon: NoteBlank },
-  { to: "/focus", label: "Focus", icon: Timer },
 ] as const;
 
 /** Saved work collections, without the Canvas entry that owns its own shell. */
