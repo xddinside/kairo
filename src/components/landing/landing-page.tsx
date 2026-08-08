@@ -536,7 +536,7 @@ function Footer() {
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-kumo-canvas text-kumo-default">
+    <div className="landing-page min-h-screen bg-kumo-canvas text-kumo-default">
       <div className="grain" aria-hidden="true" />
       <Nav />
       <main>
