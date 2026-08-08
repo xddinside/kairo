@@ -413,6 +413,55 @@ function segmentClass(active: boolean) {
 
 export function ProtoSwitcher() {
   const pathname = useLocation({ select: (location) => location.pathname });
+  const searchStr = useLocation({
+    select: (location) => location.searchStr,
+  });
+
+  const lifecycleMatch = /^\/proto\/lifecycle\/?$/.exec(pathname);
+  if (lifecycleMatch) {
+    const params = new URLSearchParams(searchStr ?? "");
+    const phase = params.get("phase") ?? "signin";
+    const phases = [
+      { id: "signin", label: "Sign in" },
+      { id: "canvas", label: "Canvas" },
+      { id: "settings", label: "Settings" },
+    ] as const;
+
+    return (
+      <div className="pointer-events-none fixed top-4 right-4 z-50 flex justify-end">
+        <nav
+          aria-label="Account lifecycle prototype"
+          className="pointer-events-auto flex items-center gap-1 rounded-full bg-kumo-base p-1 shadow-md ring ring-kumo-line"
+        >
+          <span className="pr-1 pl-2 text-xs text-kumo-subtle">Account</span>
+          {phases.map((item) => (
+            <Link
+              key={item.id}
+              to="/proto/lifecycle"
+              search={{ phase: item.id }}
+              className={segmentClass(item.id === phase)}
+              aria-current={item.id === phase ? "page" : undefined}
+            >
+              {item.label}
+            </Link>
+          ))}
+          <span aria-hidden className="mx-0.5 h-4 w-px bg-kumo-line" />
+          <Link
+            to="/proto/lifecycle"
+            search={{ phase: phase as "signin" | "canvas" | "settings", reset: true }}
+            className={segmentClass(false)}
+          >
+            Reset
+          </Link>
+          <span aria-hidden className="mx-0.5 h-4 w-px bg-kumo-line" />
+          <Link to="/proto" className={segmentClass(false)}>
+            Index
+          </Link>
+        </nav>
+      </div>
+    );
+  }
+
   const match = /^\/proto\/([abc])(\/today)?\/?$/.exec(pathname);
   if (!match) return null;
   const current = match[1] as keyof typeof quietRoutes;

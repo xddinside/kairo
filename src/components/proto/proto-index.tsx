@@ -66,6 +66,24 @@ export function ProtoIndex() {
               </div>
             </LayerCard>
           ))}
+          <LayerCard className="px-5 py-4">
+            <div className="grid content-start gap-4">
+              <div className="grid gap-1.5">
+                <Text as="h2" variant="heading3">
+                  Account onboarding and lifecycle
+                </Text>
+                <Text variant="secondary">
+                  Sign-in, the three-page introduction, first Canvas creation,
+                  settings, export, and deletion as one journey.
+                </Text>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Link to="/proto/lifecycle" className={chipLinkClass}>
+                  Open journey
+                </Link>
+              </div>
+            </div>
+          </LayerCard>
         </div>
       </div>
     </main>

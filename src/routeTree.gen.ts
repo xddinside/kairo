@@ -20,6 +20,8 @@ import { Route as CanvasIndexRouteImport } from './routes/canvas/index'
 import { Route as CanvasTodayRouteImport } from './routes/canvas/today'
 import { Route as ProtoIndexRouteImport } from './routes/proto/index'
 import { Route as ProtoCatalogRouteImport } from './routes/proto/catalog'
+import { Route as ProtoFocusRouteImport } from './routes/proto/focus'
+import { Route as ProtoLifecycleRouteImport } from './routes/proto/lifecycle'
 import { Route as ProtoAIndexRouteImport } from './routes/proto/a/index'
 import { Route as ProtoATodayRouteImport } from './routes/proto/a/today'
 import { Route as ProtoBIndexRouteImport } from './routes/proto/b/index'
@@ -82,6 +84,16 @@ const ProtoCatalogRoute = ProtoCatalogRouteImport.update({
   path: '/proto/catalog',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProtoFocusRoute = ProtoFocusRouteImport.update({
+  id: '/proto/focus',
+  path: '/proto/focus',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProtoLifecycleRoute = ProtoLifecycleRouteImport.update({
+  id: '/proto/lifecycle',
+  path: '/proto/lifecycle',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProtoAIndexRoute = ProtoAIndexRouteImport.update({
   id: '/proto/a/',
   path: '/proto/a/',
@@ -123,6 +135,8 @@ export interface FileRoutesByFullPath {
   '/timetable': typeof TimetableRoute
   '/canvas/today': typeof CanvasTodayRoute
   '/proto/catalog': typeof ProtoCatalogRoute
+  '/proto/focus': typeof ProtoFocusRoute
+  '/proto/lifecycle': typeof ProtoLifecycleRoute
   '/canvas/': typeof CanvasIndexRoute
   '/proto/': typeof ProtoIndexRoute
   '/proto/a/today': typeof ProtoATodayRoute
@@ -141,6 +155,8 @@ export interface FileRoutesByTo {
   '/timetable': typeof TimetableRoute
   '/canvas/today': typeof CanvasTodayRoute
   '/proto/catalog': typeof ProtoCatalogRoute
+  '/proto/focus': typeof ProtoFocusRoute
+  '/proto/lifecycle': typeof ProtoLifecycleRoute
   '/canvas': typeof CanvasIndexRoute
   '/proto': typeof ProtoIndexRoute
   '/proto/a/today': typeof ProtoATodayRoute
@@ -161,6 +177,8 @@ export interface FileRoutesById {
   '/timetable': typeof TimetableRoute
   '/canvas/today': typeof CanvasTodayRoute
   '/proto/catalog': typeof ProtoCatalogRoute
+  '/proto/focus': typeof ProtoFocusRoute
+  '/proto/lifecycle': typeof ProtoLifecycleRoute
   '/canvas/': typeof CanvasIndexRoute
   '/proto/': typeof ProtoIndexRoute
   '/proto/a/today': typeof ProtoATodayRoute
@@ -182,6 +200,8 @@ export interface FileRouteTypes {
     | '/timetable'
     | '/canvas/today'
     | '/proto/catalog'
+    | '/proto/focus'
+    | '/proto/lifecycle'
     | '/canvas/'
     | '/proto/'
     | '/proto/a/today'
@@ -200,6 +220,8 @@ export interface FileRouteTypes {
     | '/timetable'
     | '/canvas/today'
     | '/proto/catalog'
+    | '/proto/focus'
+    | '/proto/lifecycle'
     | '/canvas'
     | '/proto'
     | '/proto/a/today'
@@ -219,6 +241,8 @@ export interface FileRouteTypes {
     | '/timetable'
     | '/canvas/today'
     | '/proto/catalog'
+    | '/proto/focus'
+    | '/proto/lifecycle'
     | '/canvas/'
     | '/proto/'
     | '/proto/a/today'
@@ -238,6 +262,8 @@ export interface RootRouteChildren {
   TasksRoute: typeof TasksRoute
   TimetableRoute: typeof TimetableRoute
   ProtoCatalogRoute: typeof ProtoCatalogRoute
+  ProtoFocusRoute: typeof ProtoFocusRoute
+  ProtoLifecycleRoute: typeof ProtoLifecycleRoute
   ProtoIndexRoute: typeof ProtoIndexRoute
   ProtoATodayRoute: typeof ProtoATodayRoute
   ProtoBTodayRoute: typeof ProtoBTodayRoute
@@ -326,6 +352,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtoCatalogRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/proto/focus': {
+      id: '/proto/focus'
+      path: '/proto/focus'
+      fullPath: '/proto/focus'
+      preLoaderRoute: typeof ProtoFocusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/proto/lifecycle': {
+      id: '/proto/lifecycle'
+      path: '/proto/lifecycle'
+      fullPath: '/proto/lifecycle'
+      preLoaderRoute: typeof ProtoLifecycleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/proto/a/': {
       id: '/proto/a/'
       path: '/proto/a'
@@ -393,6 +433,8 @@ const rootRouteChildren: RootRouteChildren = {
   TasksRoute: TasksRoute,
   TimetableRoute: TimetableRoute,
   ProtoCatalogRoute: ProtoCatalogRoute,
+  ProtoFocusRoute: ProtoFocusRoute,
+  ProtoLifecycleRoute: ProtoLifecycleRoute,
   ProtoIndexRoute: ProtoIndexRoute,
   ProtoATodayRoute: ProtoATodayRoute,
   ProtoBTodayRoute: ProtoBTodayRoute,
