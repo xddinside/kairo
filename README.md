@@ -1,18 +1,32 @@
 # Kairo
 
-A student productivity workspace that reshapes itself around what needs to be done.
+Kairo is a workspace for students. Tell it what you need to do, and it builds a focused canvas with the right tasks, deadlines, notes, and timetable details.
+
+This is a hackathon prototype.
+
+## Run it locally
+
+You need [Bun](https://bun.sh/).
 
 ```bash
 bun install --frozen-lockfile
 bun run dev
 ```
 
-The development server starts through Portless. The current prototype is available at `https://kairo.localhost/canvas`.
+Open [https://kairo.localhost](https://kairo.localhost).
+
+## Useful commands
 
 ```bash
-bun run check
-bun run test
-bun run build
+bun run check       # Generate routes and check types
+bun run test:unit   # Run unit tests
+bun run build       # Create a production build
 ```
 
-Database tests skip until `KAIRO_DATABASE_TEST_URL` points at an isolated test or preview database. Browser tests skip until the Playwright Chromium browser is installed.
+## Built with
+
+- React and TanStack Start
+- Cloudflare Kumo
+- Clerk for sign-in
+- Drizzle and Postgres
+- Effect
