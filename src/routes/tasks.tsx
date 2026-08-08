@@ -13,6 +13,7 @@ import {
   CircleDashed,
   CircleNotch,
   Clock,
+  FunnelSimple,
   ListChecks,
   MagnifyingGlass,
   Plus,
@@ -48,14 +49,37 @@ import { requireAuthenticatedRoute } from "../server/auth/functions";
 
 const searchSchema = z.object({
   q: z.string().max(100).optional().catch(undefined),
-  status: z.enum(["open", "completed", "cancelled", "all"]).optional().catch("open"),
+  status: z
+    .enum(["open", "completed", "cancelled", "all"])
+    .optional()
+    .catch("open"),
   courseId: z.string().uuid().optional().catch(undefined),
-  assessment: z.union([z.literal("none"), z.string().uuid()]).optional().catch(undefined),
+  assessment: z
+    .union([z.literal("none"), z.string().uuid()])
+    .optional()
+    .catch(undefined),
   window: z.enum(["all", "next7", "custom"]).optional().catch("all"),
-  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().catch(undefined),
-  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().catch(undefined),
-  sort: z.enum(["due_asc", "updated_desc", "title_asc"]).optional().catch("due_asc"),
-  pageSize: z.coerce.number().pipe(z.union([z.literal(10), z.literal(25), z.literal(50), z.literal(100)])).optional().catch(25),
+  from: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional()
+    .catch(undefined),
+  to: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional()
+    .catch(undefined),
+  sort: z
+    .enum(["due_asc", "updated_desc", "title_asc"])
+    .optional()
+    .catch("due_asc"),
+  pageSize: z.coerce
+    .number()
+    .pipe(
+      z.union([z.literal(10), z.literal(25), z.literal(50), z.literal(100)]),
+    )
+    .optional()
+    .catch(25),
   cursor: z.string().max(2048).optional().catch(undefined),
 });
 
@@ -65,13 +89,41 @@ export const Route = createFileRoute("/tasks")({
   loaderDeps: ({ search }) => search,
   loader: async ({ deps }) => {
     const window = deps.window ?? "all";
-    const from = window === "custom" && deps.from && deps.to && deps.from <= deps.to ? deps.from : null;
-    const to = from ? deps.to ?? null : null;
-    const [page, courseResult, assessmentResult] = await Promise.all([listTasks({ data: { q: deps.q?.trim() ?? "", status: deps.status ?? "open", courseId: deps.courseId ?? null, assessment: deps.assessment ?? null, window: from ? "custom" : window === "next7" ? "next7" : "all", from, to, sort: deps.sort ?? "due_asc", pageSize: deps.pageSize ?? 25, cursor: deps.cursor ?? null } }), listCourseOptions(), listAssessmentOptions()]);
-    return { page, courses: isCourseOptions(courseResult) ? courseResult : [], assessments: isAssessmentOptions(assessmentResult) ? assessmentResult : [] };
+    const from =
+      window === "custom" && deps.from && deps.to && deps.from <= deps.to
+        ? deps.from
+        : null;
+    const to = from ? (deps.to ?? null) : null;
+    const [page, courseResult, assessmentResult] = await Promise.all([
+      listTasks({
+        data: {
+          q: deps.q?.trim() ?? "",
+          status: deps.status ?? "open",
+          courseId: deps.courseId ?? null,
+          assessment: deps.assessment ?? null,
+          window: from ? "custom" : window === "next7" ? "next7" : "all",
+          from,
+          to,
+          sort: deps.sort ?? "due_asc",
+          pageSize: deps.pageSize ?? 25,
+          cursor: deps.cursor ?? null,
+        },
+      }),
+      listCourseOptions(),
+      listAssessmentOptions(),
+    ]);
+    return {
+      page,
+      courses: isCourseOptions(courseResult) ? courseResult : [],
+      assessments: isAssessmentOptions(assessmentResult)
+        ? assessmentResult
+        : [],
+    };
   },
   pendingComponent: () => <AcademicLoading title="Tasks" />,
-  errorComponent: ({ reset }) => <AcademicError title="Tasks unavailable" reset={reset} />,
+  errorComponent: ({ reset }) => (
+    <AcademicError title="Tasks unavailable" reset={reset} />
+  ),
   component: TasksRoute,
 });
 
@@ -80,6 +132,7 @@ function TasksRoute() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const [open, setOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [errors, setErrors] = useState<ReadonlyArray<AcademicFieldError>>([]);
 
@@ -90,12 +143,29 @@ function TasksRoute() {
       const result = await createTask({ data: values });
       if (result._tag === "invalid") {
         setErrors(result.fields);
-      } else if ((result._tag === "applied" || result._tag === "already_applied") && result.value) {
+      } else if (
+        (result._tag === "applied" || result._tag === "already_applied") &&
+        result.value
+      ) {
         setOpen(false);
-        sessionStorage.setItem("kairo.academic.notice", JSON.stringify({ message: "Task created.", token: result.undoToken }));
-        await navigate({ to: "/tasks/$taskId", params: { taskId: result.value.id } });
+        sessionStorage.setItem(
+          "kairo.academic.notice",
+          JSON.stringify({ message: "Task created.", token: result.undoToken }),
+        );
+        await navigate({
+          to: "/tasks/$taskId",
+          params: { taskId: result.value.id },
+        });
       } else {
-        setErrors([{ field: "form", message: result._tag === "not_found" ? "A selected course or assessment is no longer available." : "The task could not be created. Retry when ready." }]);
+        setErrors([
+          {
+            field: "form",
+            message:
+              result._tag === "not_found"
+                ? "A selected course or assessment is no longer available."
+                : "The task could not be created. Retry when ready.",
+          },
+        ]);
       }
     } finally {
       setPending(false);
@@ -105,13 +175,33 @@ function TasksRoute() {
   const submitSearch = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const q = String(new FormData(event.currentTarget).get("q") ?? "").trim();
-    void navigate({ search: (previous) => ({ ...previous, q: q || undefined, cursor: undefined }), replace: true });
+    void navigate({
+      search: (previous) => ({
+        ...previous,
+        q: q || undefined,
+        cursor: undefined,
+      }),
+      replace: true,
+    });
   };
 
   const setFilter = (next: Record<string, string | undefined>) =>
-    void navigate({ search: (previous) => ({ ...previous, ...next, cursor: undefined }) });
+    void navigate({
+      search: (previous) => ({ ...previous, ...next, cursor: undefined }),
+    });
 
-  const filtered = Boolean(search.q || search.courseId || search.assessment || search.status !== "open" || search.window !== "all");
+  const filtered = Boolean(
+    search.q ||
+    search.courseId ||
+    search.assessment ||
+    (search.status ?? "open") !== "open" ||
+    (search.window ?? "all") !== "all",
+  );
+  const advancedFilterCount = [
+    search.courseId,
+    search.assessment,
+    (search.window ?? "all") !== "all",
+  ].filter(Boolean).length;
   const today = new Date().toISOString().slice(0, 10);
 
   return (
@@ -207,111 +297,151 @@ function TasksRoute() {
                 Search
               </button>
             </form>
-            <div role="group" aria-label="Task status" className="min-w-0">
-              <Tabs
-                variant="segmented"
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <div role="group" aria-label="Task status" className="min-w-0">
+                <Tabs
+                  variant="segmented"
+                  size="sm"
+                  value={search.status ?? "open"}
+                  onValueChange={(status) => {
+                    setFilter({ status: status || "open" });
+                  }}
+                  tabs={[
+                    { value: "open", label: "Open" },
+                    { value: "completed", label: "Completed" },
+                    { value: "cancelled", label: "Cancelled" },
+                    { value: "all", label: "All" },
+                  ]}
+                />
+              </div>
+              <Button
+                variant="ghost"
                 size="sm"
-                value={search.status ?? "open"}
-                onValueChange={(status) => {
-                  setFilter({ status: status || "open" });
-                }}
-                tabs={[
-                  { value: "open", label: "Open" },
-                  { value: "completed", label: "Completed" },
-                  { value: "cancelled", label: "Cancelled" },
-                  { value: "all", label: "All" },
-                ]}
-              />
+                aria-expanded={filtersOpen}
+                aria-controls="task-filters"
+                icon={
+                  <FunnelSimple aria-hidden="true" size={15} weight="regular" />
+                }
+                onClick={() => setFiltersOpen((current) => !current)}
+                className={`min-h-8 shrink-0 rounded-md px-2.5 text-sm transition-transform duration-150 ease-out active:scale-[0.96] ${filtersOpen || advancedFilterCount > 0 ? "bg-kumo-tint text-kumo-brand" : "text-kumo-subtle"}`}
+              >
+                Filters
+                {advancedFilterCount > 0 ? (
+                  <span className="flex min-w-5 items-center justify-center rounded-full bg-kumo-brand px-1.5 text-xs font-semibold tabular-nums text-kumo-inverse">
+                    {advancedFilterCount}
+                  </span>
+                ) : null}
+              </Button>
             </div>
           </LayerCard.Primary>
-          <LayerCard.Secondary className="flex flex-col gap-3 px-3 py-3 sm:px-4">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Select
-                aria-label="Course"
-                size="lg"
-                value={search.courseId ?? "all"}
-                onValueChange={(value) => {
-                  if (value === null) return;
-                  setFilter({ courseId: value === "all" ? undefined : value });
-                }}
-                items={{
-                  all: "All courses",
-                  ...Object.fromEntries(courses.map((course) => [course.id, course.title])),
-                }}
-                className="w-full"
-              />
-              <Select
-                aria-label="Assessment"
-                size="lg"
-                value={search.assessment ?? "all"}
-                onValueChange={(value) => {
-                  if (value === null) return;
-                  setFilter({
-                    assessment: value === "all" ? undefined : value,
-                  });
-                }}
-                items={{
-                  all: "All assessments",
-                  none: "No assessment",
-                  ...Object.fromEntries(assessments.map((assessment) => [assessment.id, assessment.title])),
-                }}
-                className="w-full"
-              />
-              <Select
-                aria-label="Due window"
-                size="lg"
-                value={search.window ?? "all"}
-                onValueChange={(value) => {
-                  if (value === null) return;
-                  setFilter({
-                    window: value,
-                    ...(value !== "custom" ? { from: undefined, to: undefined } : {}),
-                  });
-                }}
-                items={{
-                  all: "All dates",
-                  next7: "Next seven days",
-                  custom: "Custom range",
-                }}
-                className="w-full"
-              />
-              <Select
-                aria-label="Sort"
-                size="lg"
-                value={search.sort ?? "due_asc"}
-                onValueChange={(value) => {
-                  if (value === null) return;
-                  setFilter({ sort: value });
-                }}
-                items={{
-                  due_asc: "Due date",
-                  updated_desc: "Recently updated",
-                  title_asc: "Title",
-                }}
-                className="w-full"
-              />
-            </div>
-            {search.window === "custom" ? (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="grid gap-1.5 text-sm font-medium">
-                  From
-                  <Input
-                    type="date"
-                    defaultValue={search.from ?? ""}
-                    onChange={(event) => setFilter({ from: event.target.value || undefined })}
-                  />
-                </label>
-                <label className="grid gap-1.5 text-sm font-medium">
-                  To
-                  <Input
-                    type="date"
-                    defaultValue={search.to ?? ""}
-                    onChange={(event) => setFilter({ to: event.target.value || undefined })}
-                  />
-                </label>
+          {filtersOpen ? (
+            <LayerCard.Secondary
+              id="task-filters"
+              className="flex flex-col gap-3 px-3 py-3 sm:px-4"
+            >
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <Select
+                  aria-label="Course"
+                  size="lg"
+                  value={search.courseId ?? "all"}
+                  onValueChange={(value) => {
+                    if (value === null) return;
+                    setFilter({
+                      courseId: value === "all" ? undefined : value,
+                    });
+                  }}
+                  items={{
+                    all: "All courses",
+                    ...Object.fromEntries(
+                      courses.map((course) => [course.id, course.title]),
+                    ),
+                  }}
+                  className="w-full"
+                />
+                <Select
+                  aria-label="Assessment"
+                  size="lg"
+                  value={search.assessment ?? "all"}
+                  onValueChange={(value) => {
+                    if (value === null) return;
+                    setFilter({
+                      assessment: value === "all" ? undefined : value,
+                    });
+                  }}
+                  items={{
+                    all: "All assessments",
+                    none: "No assessment",
+                    ...Object.fromEntries(
+                      assessments.map((assessment) => [
+                        assessment.id,
+                        assessment.title,
+                      ]),
+                    ),
+                  }}
+                  className="w-full"
+                />
+                <Select
+                  aria-label="Due window"
+                  size="lg"
+                  value={search.window ?? "all"}
+                  onValueChange={(value) => {
+                    if (value === null) return;
+                    setFilter({
+                      window: value,
+                      ...(value !== "custom"
+                        ? { from: undefined, to: undefined }
+                        : {}),
+                    });
+                  }}
+                  items={{
+                    all: "All dates",
+                    next7: "Next seven days",
+                    custom: "Custom range",
+                  }}
+                  className="w-full"
+                />
+                <Select
+                  aria-label="Sort"
+                  size="lg"
+                  value={search.sort ?? "due_asc"}
+                  onValueChange={(value) => {
+                    if (value === null) return;
+                    setFilter({ sort: value });
+                  }}
+                  items={{
+                    due_asc: "Due date",
+                    updated_desc: "Recently updated",
+                    title_asc: "Title",
+                  }}
+                  className="w-full"
+                />
               </div>
-            ) : null}
-          </LayerCard.Secondary>
+              {search.window === "custom" ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="grid gap-1.5 text-sm font-medium">
+                    From
+                    <Input
+                      type="date"
+                      defaultValue={search.from ?? ""}
+                      onChange={(event) =>
+                        setFilter({ from: event.target.value || undefined })
+                      }
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-sm font-medium">
+                    To
+                    <Input
+                      type="date"
+                      defaultValue={search.to ?? ""}
+                      onChange={(event) =>
+                        setFilter({ to: event.target.value || undefined })
+                      }
+                    />
+                  </label>
+                </div>
+              ) : null}
+            </LayerCard.Secondary>
+          ) : null}
         </LayerCard>
 
         <section className="mt-9" aria-labelledby="task-list-heading">
@@ -331,7 +461,10 @@ function TasksRoute() {
           </div>
 
           {page.invalidCursor ? (
-            <p role="status" className="mb-3 rounded-lg bg-kumo-warning-tint px-4 py-3 text-sm text-kumo-warning">
+            <p
+              role="status"
+              className="mb-3 rounded-lg bg-kumo-warning-tint px-4 py-3 text-sm text-kumo-warning"
+            >
               That page link expired. Showing the first page.
             </p>
           ) : null}
@@ -436,7 +569,10 @@ function TasksRoute() {
   );
 }
 
-const STATUS_STYLES: Record<AcademicStatus, { readonly className: string; readonly icon: typeof ListChecks }> = {
+const STATUS_STYLES: Record<
+  AcademicStatus,
+  { readonly className: string; readonly icon: typeof ListChecks }
+> = {
   open: {
     className: "bg-kumo-brand-tint text-kumo-brand",
     icon: CircleNotch,
@@ -451,9 +587,16 @@ const STATUS_STYLES: Record<AcademicStatus, { readonly className: string; readon
   },
 };
 
-function TaskRow({ task, today }: { readonly task: Task; readonly today: string }) {
+function TaskRow({
+  task,
+  today,
+}: {
+  readonly task: Task;
+  readonly today: string;
+}) {
   const style = STATUS_STYLES[task.status];
-  const overdue = task.status === "open" && task.dueDate !== null && task.dueDate < today;
+  const overdue =
+    task.status === "open" && task.dueDate !== null && task.dueDate < today;
   const Icon = style.icon;
   const due = task.dueDate ? (
     <time dateTime={`${task.dueDate}${task.dueTime ? `T${task.dueTime}` : ""}`}>
@@ -529,8 +672,29 @@ function formatTime(value: string) {
 }
 
 function isCourseOptions(value: unknown): value is ReadonlyArray<CourseOption> {
-  return Array.isArray(value) && value.every((item) => typeof item === "object" && item !== null && "id" in item && "title" in item && !("status" in item));
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (item) =>
+        typeof item === "object" &&
+        item !== null &&
+        "id" in item &&
+        "title" in item &&
+        !("status" in item),
+    )
+  );
 }
-function isAssessmentOptions(value: unknown): value is ReadonlyArray<AssessmentOption> {
-  return Array.isArray(value) && value.every((item) => typeof item === "object" && item !== null && "courseId" in item && !("status" in item));
+function isAssessmentOptions(
+  value: unknown,
+): value is ReadonlyArray<AssessmentOption> {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (item) =>
+        typeof item === "object" &&
+        item !== null &&
+        "courseId" in item &&
+        !("status" in item),
+    )
+  );
 }

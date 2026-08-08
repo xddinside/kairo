@@ -1,20 +1,25 @@
 import { Badge } from "@cloudflare/kumo/components/badge";
 import { Button } from "@cloudflare/kumo/components/button";
 import { Dialog } from "@cloudflare/kumo/components/dialog";
+import { DropdownMenu } from "@cloudflare/kumo/components/dropdown";
 import { Empty } from "@cloudflare/kumo/components/empty";
 import { InputGroup } from "@cloudflare/kumo/components/input-group";
 import { LayerCard } from "@cloudflare/kumo/components/layer-card";
 import { Select } from "@cloudflare/kumo/components/select";
 import { Text } from "@cloudflare/kumo/components/text";
 import {
-  ArrowRight,
+  Archive,
   BookOpen,
   Books,
+  DotsThree,
   MagnifyingGlass,
+  PencilSimple,
   Plus,
+  Trash,
+  WarningCircle,
   X,
 } from "@phosphor-icons/react";
-import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { startTransition, useEffect, useState } from "react";
 import { z } from "zod";
 
@@ -30,9 +35,13 @@ import {
 } from "../components/academic/course-form";
 import type { AcademicFieldError, Course } from "../server/academic/domain";
 import {
+  archiveCourse,
   createCourse,
+  deleteCourse,
   listCourses,
+  reopenCourse,
   undoAcademicCommand,
+  updateCourse,
 } from "../server/academic/functions";
 import { requireAuthenticatedRoute } from "../server/auth/functions";
 
@@ -74,6 +83,8 @@ function CoursesRoute() {
   const navigate = Route.useNavigate();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [editingCourse, setEditingCourse] = useState<Course>();
+  const [deletingCourse, setDeletingCourse] = useState<Course>();
   const [pending, setPending] = useState(false);
   const [errors, setErrors] = useState<ReadonlyArray<AcademicFieldError>>([]);
   const [notice, setNotice] = useState<{
@@ -162,6 +173,102 @@ function CoursesRoute() {
     });
     if (result._tag === "applied") {
       startTransition(() => void router.invalidate());
+    }
+  };
+
+  const update = async (values: CourseFormValues) => {
+    if (!editingCourse) return;
+    setPending(true);
+    setErrors([]);
+    try {
+      const result = await updateCourse({
+        data: {
+          courseId: editingCourse.id,
+          expectedVersion: editingCourse.version,
+          patch: { title: values.title, code: values.code },
+          idempotencyKey: values.idempotencyKey,
+        },
+      });
+      if (result._tag === "invalid") {
+        setErrors(result.fields);
+      } else if (result._tag === "conflict") {
+        setErrors([
+          {
+            field: "form",
+            message:
+              "This course changed. Reload to see the current values; your edits remain here.",
+          },
+        ]);
+      } else if (
+        result._tag === "applied" ||
+        result._tag === "already_applied"
+      ) {
+        setEditingCourse(undefined);
+        setNotice({ message: "Course updated.", token: result.undoToken });
+        startTransition(() => void router.invalidate());
+      } else {
+        setErrors([{ field: "form", message: "The course could not be saved." }]);
+      }
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const changeLifecycle = async (course: Course) => {
+    setPending(true);
+    try {
+      const command = course.lifecycle === "current" ? archiveCourse : reopenCourse;
+      const result = await command({
+        data: {
+          courseId: course.id,
+          expectedVersion: course.version,
+          idempotencyKey: crypto.randomUUID(),
+        },
+      });
+      if (result._tag === "applied" || result._tag === "already_applied") {
+        setNotice({
+          message: course.lifecycle === "current" ? "Course archived." : "Course restored.",
+          token: result.undoToken,
+        });
+        startTransition(() => void router.invalidate());
+      } else {
+        setNotice({
+          message:
+            result._tag === "conflict"
+              ? "This course changed. Reload before trying again."
+              : "The course could not be changed.",
+        });
+      }
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!deletingCourse) return;
+    setPending(true);
+    try {
+      const result = await deleteCourse({
+        data: {
+          courseId: deletingCourse.id,
+          expectedVersion: deletingCourse.version,
+          idempotencyKey: crypto.randomUUID(),
+        },
+      });
+      if (result._tag === "applied" || result._tag === "already_applied") {
+        setDeletingCourse(undefined);
+        setNotice({ message: "Course deleted.", token: result.undoToken });
+        startTransition(() => void router.invalidate());
+      } else {
+        setNotice({
+          message:
+            result._tag === "conflict" && result.reason === "has_dependents"
+              ? "Move or delete linked work before deleting this course."
+              : "The course could not be deleted.",
+        });
+      }
+    } finally {
+      setPending(false);
     }
   };
 
@@ -340,12 +447,71 @@ function CoursesRoute() {
                   key={course.id}
                   course={course}
                   index={index + 1}
+                  pending={pending}
+                  onEdit={setEditingCourse}
+                  onLifecycle={changeLifecycle}
+                  onDelete={setDeletingCourse}
                 />
               ))}
             </ol>
           )}
         </section>
       </main>
+      <Dialog.Root
+        open={Boolean(editingCourse)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setEditingCourse(undefined);
+        }}
+      >
+        <Dialog className="p-5 sm:max-w-xl sm:p-6">
+          <div className="mb-5 flex items-center justify-between">
+            <Dialog.Title className="text-xl font-semibold">Edit course</Dialog.Title>
+            <Dialog.Close
+              aria-label="Close edit course"
+              render={(props) => (
+                <Button
+                  {...props}
+                  title="Close edit course"
+                  variant="secondary"
+                  shape="square"
+                  icon={<X aria-hidden="true" size={18} />}
+                />
+              )}
+            />
+          </div>
+          <CourseForm
+            course={editingCourse}
+            errors={errors}
+            pending={pending}
+            onCancel={() => setEditingCourse(undefined)}
+            onSubmit={update}
+          />
+        </Dialog>
+      </Dialog.Root>
+      <Dialog.Root
+        open={Boolean(deletingCourse)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setDeletingCourse(undefined);
+        }}
+      >
+        <Dialog className="p-5 sm:max-w-md sm:p-6">
+          <WarningCircle aria-hidden="true" size={24} className="text-kumo-danger" />
+          <Dialog.Title className="mt-3 text-xl font-semibold">
+            Delete {deletingCourse?.title ?? "course"}?
+          </Dialog.Title>
+          <Dialog.Description className="mt-2 text-sm text-kumo-subtle">
+            The course will be removed from academic routes.
+          </Dialog.Description>
+          <div className="mt-6 flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setDeletingCourse(undefined)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" disabled={pending} onClick={() => void remove()}>
+              Delete course
+            </Button>
+          </div>
+        </Dialog>
+      </Dialog.Root>
       {notice ? (
         <AcademicToast
           message={notice.message}
@@ -361,20 +527,23 @@ function CoursesRoute() {
 function CourseFolio({
   course,
   index,
+  pending,
+  onEdit,
+  onLifecycle,
+  onDelete,
 }: {
   readonly course: Course;
   readonly index: number;
+  readonly pending: boolean;
+  readonly onEdit: (course: Course) => void;
+  readonly onLifecycle: (course: Course) => Promise<void>;
+  readonly onDelete: (course: Course) => void;
 }) {
   const folioNumber = String(index).padStart(2, "0");
 
   return (
     <li className="min-w-0">
-      <Link
-        to="/courses/$courseId"
-        params={{ courseId: course.id }}
-        className="group block rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-kumo-focus/50 focus-visible:ring-offset-2 focus-visible:ring-offset-kumo-canvas"
-      >
-        <LayerCard className="h-full shadow-sm group-hover:shadow-md">
+        <LayerCard className="group h-full shadow-sm hover:shadow-md">
           <LayerCard.Secondary className="justify-between gap-3 px-4 py-2.5">
             <span className="flex min-w-0 items-center gap-2 text-xs text-kumo-subtle">
               <span className="font-medium tabular-nums text-kumo-brand">
@@ -404,14 +573,37 @@ function CourseFolio({
                   {course.title}
                 </Text>
               </div>
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-kumo-tint text-kumo-subtle ring ring-kumo-line group-hover:bg-kumo-brand group-hover:text-kumo-inverse">
-                <ArrowRight
-                  aria-hidden="true"
-                  size={15}
-                  weight="bold"
-                  className="transition-transform duration-150 ease-out group-hover:translate-x-0.5 motion-reduce:transform-none motion-reduce:transition-none"
-                />
-              </span>
+              <DropdownMenu>
+                <DropdownMenu.Trigger
+                  aria-label={`Actions for ${course.title}`}
+                  className="flex size-10 shrink-0 items-center justify-center rounded-lg text-kumo-subtle hover:bg-kumo-tint hover:text-kumo-default focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kumo-focus active:scale-[0.96]"
+                >
+                  <DotsThree aria-hidden="true" size={18} />
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Content className="origin-[var(--transform-origin)] transition-[transform,opacity] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] data-[ending-style]:scale-[0.97] data-[ending-style]:opacity-0 data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0 motion-reduce:transform-none">
+                  <DropdownMenu.Item
+                    icon={<PencilSimple aria-hidden="true" className="mr-2 size-4" />}
+                    onClick={() => onEdit(course)}
+                  >
+                    Edit
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item
+                    disabled={pending}
+                    icon={<Archive aria-hidden="true" className="mr-2 size-4" />}
+                    onClick={() => void onLifecycle(course)}
+                  >
+                    {course.lifecycle === "current" ? "Archive" : "Restore"}
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Separator />
+                  <DropdownMenu.Item
+                    variant="danger"
+                    icon={<Trash aria-hidden="true" className="mr-2 size-4" />}
+                    onClick={() => onDelete(course)}
+                  >
+                    Delete
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu>
             </div>
             <span className="flex items-center gap-2 text-xs text-kumo-subtle">
               <BookOpen aria-hidden="true" size={15} />
@@ -419,7 +611,6 @@ function CourseFolio({
             </span>
           </LayerCard.Primary>
         </LayerCard>
-      </Link>
     </li>
   );
 }

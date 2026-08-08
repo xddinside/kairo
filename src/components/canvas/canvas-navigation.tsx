@@ -1,14 +1,17 @@
 import { Button } from "@cloudflare/kumo/components/button";
+import { Collapsible } from "@cloudflare/kumo/components/collapsible";
 import { Dialog } from "@cloudflare/kumo/components/dialog";
 import { DropdownMenu } from "@cloudflare/kumo/components/dropdown";
 import { Input } from "@cloudflare/kumo/components/input";
 import { Sidebar } from "@cloudflare/kumo/components/sidebar";
+import { UserButton } from "@clerk/tanstack-react-start";
 import {
   Archive,
+  CaretDown,
+  ClockCounterClockwise,
   DotsThree,
   FrameCorners,
   List,
-  MagnifyingGlass,
   PencilSimple,
   Plus,
   SidebarSimple,
@@ -18,7 +21,6 @@ import {
 import { Link, useRouter, useRouterState } from "@tanstack/react-router";
 import {
   startTransition,
-  useEffect,
   useState,
   type MouseEvent,
   type ReactNode,
@@ -30,18 +32,20 @@ import {
   deleteCanvas,
   renameCanvas as renameCanvasRequest,
   restoreCanvas,
-  searchCanvases,
 } from "../../server/canvas/functions";
 import { workRoutes } from "../workspace-routes";
 
 const menuButtonClass =
-  "min-h-11 rounded-lg text-lg font-normal text-kumo-default group-data-[state=collapsed]/sidebar:size-8.5 group-data-[state=collapsed]/sidebar:min-h-8.5";
+  "min-h-11 rounded-lg text-lg font-normal text-kumo-default transition-[background-color,color,box-shadow] duration-150 ease-out hover:bg-kumo-tint hover:text-kumo-strong hover:shadow-xs group-data-[state=collapsed]/sidebar:size-8.5 group-data-[state=collapsed]/sidebar:min-h-8.5";
 
 const activeClass =
   "bg-kumo-base text-kumo-strong shadow-xs ring ring-kumo-line";
 
 const mobileRowClass =
-  "flex min-h-11 flex-1 items-center gap-2.5 rounded-lg px-3 text-lg font-normal text-kumo-default hover:bg-kumo-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kumo-focus";
+  "group flex min-h-11 flex-1 items-center gap-2.5 rounded-lg px-3 text-lg font-normal text-kumo-default transition-[background-color,color,box-shadow] duration-150 ease-out hover:bg-kumo-tint hover:text-kumo-strong hover:shadow-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kumo-focus";
+
+const newCanvasButtonClass =
+  "border border-kumo-line bg-kumo-base shadow-xs transition-[background-color,box-shadow,transform] duration-150 ease-out hover:bg-kumo-tint hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kumo-focus active:scale-[0.96] motion-reduce:active:scale-100";
 
 /** Left click without a modifier key, which the router should handle in place. */
 const isRoutedClick = (event: MouseEvent<HTMLElement>): boolean =>
@@ -74,38 +78,20 @@ type Mutate = (
 export function CanvasNavigation({
   currentCanvasId,
   recent,
-  nextClass,
   children,
 }: CanvasNavigationProps) {
   const router = useRouter();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const canvasHome = pathname === "/canvas";
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<ReadonlyArray<CanvasSummary>>(recent);
   const [renameTarget, setRenameTarget] = useState<CanvasSummary>();
   const [renameValue, setRenameValue] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
-
-  useEffect(() => {
-    if (!query.trim()) setResults(recent);
-  }, [query, recent]);
 
   const navigate = (to: string) => (event: MouseEvent<HTMLElement>) => {
     if (!isRoutedClick(event)) return;
     event.preventDefault();
     setMenuOpen(false);
     void router.navigate({ to });
-  };
-
-  const search = async (value: string) => {
-    setQuery(value);
-    if (!value.trim()) {
-      setResults(recent);
-      return;
-    }
-    setResults(
-      await searchCanvases({ data: { query: value, state: "all", limit: 20 } }),
-    );
   };
 
   const mutate: Mutate = async (canvas, operation) => {
@@ -147,25 +133,7 @@ export function CanvasNavigation({
     startTransition(() => void router.invalidate());
   };
 
-  const items = results.slice(0, 8);
-
-  const searchField = (size: "sm" | "base") => (
-    <div className="relative w-full">
-      <MagnifyingGlass
-        aria-hidden="true"
-        size={16}
-        className="pointer-events-none absolute top-1/2 start-3 z-10 -translate-y-1/2 text-kumo-subtle"
-      />
-      <Input
-        size={size}
-        value={query}
-        onChange={(event) => void search(event.target.value)}
-        placeholder="Search canvases"
-        aria-label="Search canvases"
-        className="w-full ps-9 text-base"
-      />
-    </div>
-  );
+  const items = recent.slice(0, 8);
 
   return (
     <>
@@ -208,8 +176,8 @@ export function CanvasNavigation({
                       className={`shrink-0 ${canvasHome ? "text-kumo-brand" : "text-kumo-subtle"}`}
                     />
                   }
-                  className={`min-h-11 rounded-lg text-lg font-medium ${
-                    canvasHome ? activeClass : "text-kumo-default"
+                  className={`${newCanvasButtonClass} min-h-11 text-lg font-medium ${
+                    canvasHome ? "text-kumo-strong" : "text-kumo-default"
                   } group-data-[state=collapsed]/sidebar:size-8.5 group-data-[state=collapsed]/sidebar:min-h-8.5`}
                 >
                   New canvas
@@ -218,56 +186,73 @@ export function CanvasNavigation({
             </Sidebar.Group>
 
             {recent.length > 0 ? (
-              <Sidebar.Group className="pt-2 pb-3">
-                <Sidebar.GroupLabel className="text-base">Recent canvases</Sidebar.GroupLabel>
-                <div className="px-2 pb-2 group-data-[state=collapsed]/sidebar:hidden">
-                  {searchField("sm")}
-                </div>
-                {items.length === 0 ? (
-                <EmptyCanvases className="group-data-[state=collapsed]/sidebar:hidden" />
-              ) : (
-                <Sidebar.Menu>
-                  {items.map((canvas) => {
-                    const title = canvas.title ?? "Untitled canvas";
-                    const current = currentCanvasId === canvas.id;
-                    return (
-                      <Sidebar.MenuItem
-                        key={canvas.id}
-                        className="group/item relative flex items-center"
-                      >
+              <Sidebar.Menu>
+                <Sidebar.MenuItem>
+                  <Sidebar.Collapsible defaultOpen>
+                    <Sidebar.CollapsibleTrigger
+                      render={
                         <Sidebar.MenuButton
-                          href={`/canvas/${canvas.id}`}
-                          onClick={navigate(`/canvas/${canvas.id}`)}
-                          active={current}
-                          aria-current={current ? "page" : undefined}
-                          tooltip={title}
                           icon={
-                            <FrameCorners
+                            <ClockCounterClockwise
                               aria-hidden="true"
                               size={18}
                               weight="regular"
-                              className={`shrink-0 ${current ? "text-kumo-brand" : "text-kumo-subtle"}`}
+                              className="shrink-0 text-kumo-subtle group-hover/menu-button:text-kumo-default"
                             />
                           }
-                          className={`min-w-0 flex-1 pe-10 ${menuButtonClass} ${current ? activeClass : ""}`}
+                          tooltip="Recent canvases"
+                          className={`${menuButtonClass} font-medium`}
                         >
-                          <span className="min-w-0 flex-1 truncate">{title}</span>
+                          Recent canvases
+                          <Sidebar.MenuChevron />
                         </Sidebar.MenuButton>
-                        <CanvasActions
-                          canvas={canvas}
-                          title={title}
-                          onMutate={mutate}
-                          className="absolute end-1 group-data-[state=collapsed]/sidebar:hidden md:opacity-0 md:group-hover/item:opacity-100 md:group-focus-within/item:opacity-100"
-                        />
-                      </Sidebar.MenuItem>
-                    );
-                  })}
-                </Sidebar.Menu>
-                )}
-              </Sidebar.Group>
+                      }
+                    />
+                    <Sidebar.CollapsibleContent>
+                      <Sidebar.Menu className="mt-1">
+                        {items.map((canvas) => {
+                          const title = canvas.title ?? "Untitled canvas";
+                          const current = currentCanvasId === canvas.id;
+                          return (
+                            <Sidebar.MenuItem
+                              key={canvas.id}
+                              className="group/item relative flex items-center"
+                            >
+                              <Sidebar.MenuButton
+                                href={`/canvas/${canvas.id}`}
+                                onClick={navigate(`/canvas/${canvas.id}`)}
+                                active={current}
+                                aria-current={current ? "page" : undefined}
+                                tooltip={title}
+                                icon={
+                                  <FrameCorners
+                                    aria-hidden="true"
+                                    size={18}
+                                    weight="regular"
+                                    className={`shrink-0 ${current ? "text-kumo-brand" : "text-kumo-subtle group-hover/menu-button:text-kumo-default"}`}
+                                  />
+                                }
+                                className={`min-w-0 flex-1 pe-10 ${menuButtonClass} ${current ? activeClass : ""}`}
+                              >
+                                <span className="min-w-0 flex-1 truncate">{title}</span>
+                              </Sidebar.MenuButton>
+                              <CanvasActions
+                                canvas={canvas}
+                                title={title}
+                                onMutate={mutate}
+                                className="absolute end-1 group-data-[state=collapsed]/sidebar:hidden md:opacity-0 md:group-hover/item:opacity-100 md:group-focus-within/item:opacity-100"
+                              />
+                            </Sidebar.MenuItem>
+                          );
+                        })}
+                      </Sidebar.Menu>
+                    </Sidebar.CollapsibleContent>
+                  </Sidebar.Collapsible>
+                </Sidebar.MenuItem>
+              </Sidebar.Menu>
             ) : null}
 
-              <Sidebar.Group className="pt-2">
+            <Sidebar.Group className="pt-2 pb-2">
               <Sidebar.GroupLabel className="text-base">Your work</Sidebar.GroupLabel>
               <Sidebar.Menu>
                 {workRoutes.map(({ to, label, icon: Icon }) => {
@@ -285,7 +270,7 @@ export function CanvasNavigation({
                           aria-hidden="true"
                           size={18}
                           weight="regular"
-                          className={`shrink-0 ${current ? "text-kumo-brand" : "text-kumo-subtle"}`}
+                          className={`shrink-0 ${current ? "text-kumo-brand" : "text-kumo-subtle group-hover/menu-button:text-kumo-default"}`}
                         />
                       }
                       className={`${menuButtonClass} ${current ? activeClass : ""}`}
@@ -296,11 +281,12 @@ export function CanvasNavigation({
                 })}
               </Sidebar.Menu>
             </Sidebar.Group>
+
           </nav>
         </Sidebar.Content>
 
         <Sidebar.Footer className="h-auto items-stretch border-t border-kumo-line px-3 py-3">
-          <NextClassCard nextClass={nextClass} />
+          <ClerkUserControl />
         </Sidebar.Footer>
       </Sidebar>
 
@@ -355,9 +341,7 @@ export function CanvasNavigation({
                 to="/canvas"
                 onClick={() => setMenuOpen(false)}
                 aria-current={canvasHome ? "page" : undefined}
-                className={`flex min-h-11 items-center gap-2.5 rounded-lg px-3 text-lg font-medium ${
-                  canvasHome ? activeClass : "text-kumo-default hover:bg-kumo-tint"
-                }`}
+                className={`${newCanvasButtonClass} group flex min-h-11 items-center gap-2.5 rounded-lg px-3 text-lg font-medium ${canvasHome ? "text-kumo-strong" : "text-kumo-default"}`}
               >
                 <Plus
                   aria-hidden="true"
@@ -367,13 +351,19 @@ export function CanvasNavigation({
                 New canvas
               </Link>
 
-              {recent.length > 0 ? (
-                <div className="grid gap-2">
-                  <MobileGroupLabel>Recent canvases</MobileGroupLabel>
-                  {searchField("base")}
-                  {items.length === 0 ? (
-                  <EmptyCanvases />
-                ) : (
+              <Collapsible.Root defaultOpen className="grid gap-2">
+                <Collapsible.Trigger
+                  className="group flex min-h-11 items-center justify-between gap-3 rounded-lg px-3 text-left text-base font-medium text-kumo-subtle transition-[background-color,color,box-shadow] duration-150 ease-out hover:bg-kumo-tint hover:text-kumo-strong hover:shadow-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kumo-focus"
+                >
+                  Recent canvases
+                  <CaretDown
+                    aria-hidden="true"
+                    size={16}
+                    weight="bold"
+                    className="transition-transform duration-150 ease-out [[data-panel-open]_&]:rotate-180"
+                  />
+                </Collapsible.Trigger>
+                <Collapsible.Panel>
                   <ul className="grid gap-1">
                     {items.map((canvas) => {
                       const title = canvas.title ?? "Untitled canvas";
@@ -390,9 +380,7 @@ export function CanvasNavigation({
                             <FrameCorners
                               aria-hidden="true"
                               size={18}
-                              className={
-                                current ? "shrink-0 text-kumo-brand" : "shrink-0 text-kumo-subtle"
-                              }
+                              className={`shrink-0 ${current ? "text-kumo-brand" : "text-kumo-subtle group-hover:text-kumo-default"}`}
                             />
                             <span className="min-w-0 flex-1 truncate">{title}</span>
                           </Link>
@@ -406,38 +394,37 @@ export function CanvasNavigation({
                       );
                     })}
                   </ul>
-                  )}
-                </div>
-              ) : null}
+                </Collapsible.Panel>
+              </Collapsible.Root>
 
               <div className="grid gap-2">
                 <MobileGroupLabel>Your work</MobileGroupLabel>
                 <ul className="grid gap-1">
-                  {workRoutes.map(({ to, label, icon: Icon }) => (
-                    <li key={to}>
-                      <Link
-                        to={to}
-                        onClick={() => setMenuOpen(false)}
-                        activeProps={{
-                          "aria-current": "page",
-                          className: activeClass,
-                        }}
-                        className={mobileRowClass}
-                      >
-                        <Icon
-                          aria-hidden="true"
-                          size={18}
-                          className="shrink-0 text-kumo-subtle"
-                        />
-                        {label}
-                      </Link>
-                    </li>
-                  ))}
+                  {workRoutes.map(({ to, label, icon: Icon }) => {
+                    const current = pathname === to || pathname.startsWith(`${to}/`);
+                    return (
+                      <li key={to}>
+                        <Link
+                          to={to}
+                          onClick={() => setMenuOpen(false)}
+                          aria-current={current ? "page" : undefined}
+                          className={`${mobileRowClass} ${current ? activeClass : ""}`}
+                        >
+                          <Icon
+                            aria-hidden="true"
+                            size={18}
+                            className={`shrink-0 ${current ? "text-kumo-brand" : "text-kumo-subtle group-hover:text-kumo-default"}`}
+                          />
+                          {label}
+                        </Link>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
 
               <div className="mt-auto pt-2">
-                <NextClassCard nextClass={nextClass} />
+                <ClerkUserControl />
               </div>
             </nav>
           </Dialog>
@@ -478,7 +465,6 @@ export function CanvasNavigation({
           </div>
         </Dialog>
       </Dialog.Root>
-
     </>
   );
 }
@@ -486,14 +472,6 @@ export function CanvasNavigation({
 function MobileGroupLabel({ children }: { readonly children: ReactNode }) {
   return (
     <p className="px-3 text-base font-medium text-kumo-subtle">{children}</p>
-  );
-}
-
-function EmptyCanvases({ className = "" }: { readonly className?: string }) {
-  return (
-    <p className={`px-3 py-4 text-lg text-kumo-subtle ${className}`}>
-      No canvases found
-    </p>
   );
 }
 
@@ -548,43 +526,21 @@ function CanvasActions({
   );
 }
 
-function NextClassCard({ nextClass }: { readonly nextClass?: NextClass }) {
-  // Resolved after mount so the User's clock never disagrees with the server's.
-  const [now, setNow] = useState<string>();
-  useEffect(() => {
-    const tick = () =>
-      setNow(
-        new Date().toLocaleTimeString(undefined, {
-          hour: "numeric",
-          minute: "2-digit",
-        }),
-      );
-    tick();
-    const timer = setInterval(tick, 60_000);
-    return () => clearInterval(timer);
-  }, []);
-
+function ClerkUserControl() {
   return (
-    <div className="w-full rounded-lg bg-kumo-base px-3 py-3 shadow-xs ring ring-kumo-line group-data-[state=collapsed]/sidebar:hidden">
-      <div className="flex items-center justify-between gap-3 text-base">
-        <span className="font-medium text-kumo-default">Today</span>
-        <span className="text-kumo-subtle tabular-nums">{now ?? ""}</span>
-      </div>
-      <div className="mt-1.5 flex items-center gap-2 text-base font-medium text-kumo-default">
-        {nextClass ? (
-          <>
-            <span
-              aria-hidden="true"
-              className="size-1.5 shrink-0 rounded-full bg-kumo-success"
-            />
-            <span className="min-w-0 truncate">
-              {nextClass.title} at {nextClass.startTime}
-            </span>
-          </>
-        ) : (
-          <span className="text-kumo-subtle">Nothing left today</span>
-        )}
-      </div>
+    <div className="flex min-h-10 w-full items-center px-1 group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-0">
+      <UserButton
+        showName
+        appearance={{
+          elements: {
+            rootBox: "w-full group-data-[state=collapsed]/sidebar:w-auto",
+            userButtonTrigger: "w-full justify-start group-data-[state=collapsed]/sidebar:size-8.5 group-data-[state=collapsed]/sidebar:justify-center",
+            userButtonBox: "flex-row-reverse justify-end gap-2 group-data-[state=collapsed]/sidebar:block",
+            userButtonOuterIdentifier: "truncate text-sm font-medium text-kumo-default group-data-[state=collapsed]/sidebar:hidden",
+            avatarBox: "size-8.5",
+          },
+        }}
+      />
     </div>
   );
 }

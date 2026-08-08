@@ -95,12 +95,12 @@ Kairo v1 must not depend on seeded data, fixed generated views, simulated action
 - `/` redirects to `/canvas`; `/canvas` is the fresh Canvas home and `/canvas/:canvasId` is a saved Canvas.
 - `/courses` and `/courses/:courseId` cover Course list and detail operations.
 - `/tasks` and `/tasks/:taskId` cover Task list and detail operations.
-- `/deadlines` combines Tasks and Assessments and has no detail route of its own.
 - `/timetable` and `/timetable/:entryId` cover Timetable entries.
 - `/notes` and `/notes/:noteId` cover Notes.
 - `/files` and `/files/:fileId` cover file listing, upload, native viewing, and deletion.
 - `/focus` shows the active session and history; `/focus/:sessionId` deep-links to a retained session.
 - Generated views have no route of their own. Canvas history arrows change state without changing the URL, and reload defaults to the latest successful view.
+- Deadlines have no stable route. Canvas infers deadline pressure from dated Tasks and Assessments and explains the evidence in a Generated view.
 - Collection routes list and create. Detail routes read, edit, and delete. All stable routes scope operations to the current User and return the same not-found result for unknown and foreign ids.
 - Filters use typed URL search parameters with a seven-day workload default, explicit ISO dates, stable ordering, and cursor pagination for unbounded lists. Prefer Effect Schema's Standard Schema adapter; use nuqs only if that adapter cannot work with TanStack Router.
 - `/canvas/today` remains prototype-only.

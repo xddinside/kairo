@@ -1,6 +1,5 @@
 import {
   Books,
-  CalendarCheck,
   CalendarDots,
   FrameCorners,
   ListChecks,
@@ -14,7 +13,6 @@ export const workspaceRoutes = [
   { to: "/courses", label: "Courses", icon: Books },
   { to: "/tasks", label: "Tasks", icon: ListChecks },
   { to: "/timetable", label: "Timetable", icon: CalendarDots },
-  { to: "/deadlines", label: "Deadlines", icon: CalendarCheck },
   { to: "/notes", label: "Notes", icon: NoteBlank },
   { to: "/focus", label: "Focus", icon: Timer },
 ] as const;

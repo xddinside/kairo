@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CanvasRouteImport } from './routes/canvas'
 import { Route as CoursesRouteImport } from './routes/courses'
-import { Route as DeadlinesRouteImport } from './routes/deadlines'
 import { Route as FocusRouteImport } from './routes/focus'
 import { Route as NotesRouteImport } from './routes/notes'
 import { Route as TasksRouteImport } from './routes/tasks'
@@ -48,11 +47,6 @@ const CanvasRoute = CanvasRouteImport.update({
 const CoursesRoute = CoursesRouteImport.update({
   id: '/courses',
   path: '/courses',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DeadlinesRoute = DeadlinesRouteImport.update({
-  id: '/deadlines',
-  path: '/deadlines',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FocusRoute = FocusRouteImport.update({
@@ -165,7 +159,6 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/canvas': typeof CanvasRouteWithChildren
   '/courses': typeof CoursesRoute
-  '/deadlines': typeof DeadlinesRoute
   '/focus': typeof FocusRoute
   '/notes': typeof NotesRoute
   '/tasks': typeof TasksRoute
@@ -191,7 +184,6 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/courses': typeof CoursesRoute
-  '/deadlines': typeof DeadlinesRoute
   '/focus': typeof FocusRoute
   '/notes': typeof NotesRoute
   '/tasks': typeof TasksRoute
@@ -219,7 +211,6 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/canvas': typeof CanvasRouteWithChildren
   '/courses': typeof CoursesRoute
-  '/deadlines': typeof DeadlinesRoute
   '/focus': typeof FocusRoute
   '/notes': typeof NotesRoute
   '/tasks': typeof TasksRoute
@@ -248,7 +239,6 @@ export interface FileRouteTypes {
     | '/'
     | '/canvas'
     | '/courses'
-    | '/deadlines'
     | '/focus'
     | '/notes'
     | '/tasks'
@@ -274,7 +264,6 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/courses'
-    | '/deadlines'
     | '/focus'
     | '/notes'
     | '/tasks'
@@ -301,7 +290,6 @@ export interface FileRouteTypes {
     | '/'
     | '/canvas'
     | '/courses'
-    | '/deadlines'
     | '/focus'
     | '/notes'
     | '/tasks'
@@ -329,7 +317,6 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CanvasRoute: typeof CanvasRouteWithChildren
   CoursesRoute: typeof CoursesRoute
-  DeadlinesRoute: typeof DeadlinesRoute
   FocusRoute: typeof FocusRoute
   NotesRoute: typeof NotesRoute
   TasksRoute: typeof TasksRoute
@@ -372,13 +359,6 @@ declare module '@tanstack/react-router' {
       path: '/courses'
       fullPath: '/courses'
       preLoaderRoute: typeof CoursesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/deadlines': {
-      id: '/deadlines'
-      path: '/deadlines'
-      fullPath: '/deadlines'
-      preLoaderRoute: typeof DeadlinesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/focus': {
@@ -548,7 +528,6 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CanvasRoute: CanvasRouteWithChildren,
   CoursesRoute: CoursesRoute,
-  DeadlinesRoute: DeadlinesRoute,
   FocusRoute: FocusRoute,
   NotesRoute: NotesRoute,
   TasksRoute: TasksRoute,
