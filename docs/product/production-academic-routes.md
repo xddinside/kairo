@@ -3,7 +3,7 @@
 Status: implementation-ready decision artifact for production v1
 
 Scope: `/tasks`, `/tasks/:taskId`, `/timetable`, `/timetable/:entryId`,
-`/deadlines`, `/notes`, and `/notes/:noteId`.
+`/notes`, and `/notes/:noteId`, plus deadline inference for Canvas.
 
 This contract resolves the route behavior left open by
 [Specify production Tasks, Timetable, Deadlines, and Notes behavior](https://github.com/xddinside/kairo/issues/7).
@@ -50,9 +50,9 @@ modules before replacing those placeholders. JSON Render and the seeded
 3. Deletes hide a record at once, retain a tombstone for 30 days, and expose a
    one-use Undo token for 30 seconds. A purge job removes expired tombstones.
    Account and File deletion rules remain those owned by their own contracts.
-4. A Task or Assessment with an optional due date is a Deadline row. The
-   `/deadlines` route never creates a Deadline record and never writes through
-   an untyped `deadlineId`.
+4. A dated Task or Assessment may contribute to deadline context for Canvas.
+   Deadline remains a derived projection, never a record or an untyped
+   `deadlineId` mutation target, and has no stable route.
 5. Timetable entries store local wall-clock values and a date range. Weekly
    entries expand into occurrences for a requested range. Skipping one
    occurrence adds an exception; editing one occurrence is out of scope.
@@ -301,8 +301,7 @@ Kairo should provide these Effect services:
 
 - `TaskService`: list, get, create, update, setStatus, delete.
 - `AssessmentService`: get, create, update, setStatus, delete. It has no
-  stable Assessment route in v1; `/deadlines` uses this service through typed
-  assessment actions.
+  stable Assessment route in v1 and remains available to typed Canvas actions.
 - `TimetableService`: list entries with expanded occurrences, get, create,
   update, skipOccurrence, delete.
 - `NoteService`: list, get, create, update, delete.
@@ -619,25 +618,18 @@ entry disappears from the requested range immediately. A stale version or
 invalid exception returns a field or conflict error without changing the
 series.
 
-### `/deadlines`
+### Deadline inference
 
-The loader executes `DeadlineQuery` with one database snapshot. The page groups
-rows by local due date and shows whether each row is a Task or Assessment.
+Deadline has no stable route. Canvas executes `DeadlineQuery` against one
+database snapshot when a request needs date pressure, overdue work, or
+preparation context. The query returns discriminated Task and Assessment rows;
+the model explains which source facts shaped its conclusion instead of
+presenting a separately managed Deadline record.
 
-- A Task row links to `/tasks/:taskId` and may complete, reopen, cancel, or
-  delete through the typed Task command.
-- An Assessment row opens a route-local edit dialog/sheet and uses
-  `AssessmentService`. It has no `/assessments/:assessmentId` URL.
-- Create offers `Task` or `Assessment` and uses the matching typed input.
-- Status changes, edits, and deletes return the shared Undo token. Delete an
-  Assessment is refused while any Task links to it.
-- The route never turns a combined row into a generic command. The client
-  sends `{ kind: "task" | "assessment", id }`, and the server reloads the
-  canonical source record before acting.
-
-If a source record is changed in another tab, the next loader or mutation
-returns the current derived row. A stale command returns conflict; the route
-does not apply a new version without an explicit student action.
+Generated actions target the canonical Task or Assessment through its typed
+service. The server reloads that source before acting, applies ownership and
+version checks, and refuses to delete an Assessment while any Task links to it.
+Canvas never turns the derived projection into a generic `deadlineId` command.
 
 ### `/notes` and `/notes/:noteId`
 
@@ -760,12 +752,11 @@ message guidance. See the sources below.
 8. A Timetable entry with an overlapping occurrence saves with a typed warning;
    it does not silently alter the other entry. An invalid DST-gap time fails
    validation.
-9. `/deadlines` returns dated Tasks and Assessments from one snapshot, puts
+9. `DeadlineQuery` returns dated Tasks and Assessments from one snapshot, puts
    overdue open rows before the requested range, and never persists a Deadline
-   record.
-10. An Assessment deadline can be edited or deleted from its typed dialog;
-    deleting it while a Task links to it returns `has_dependents` and makes no
-    change.
+   record. Canvas can explain which source rows informed its response.
+10. A typed Assessment action returns `has_dependents` without changing data
+    when a linked Task prevents deletion.
 11. A Note saves raw Markdown, renders safe output, strips unsafe HTML, and
     exports the original Markdown rather than rendered markup.
 12. A stale Note save leaves local edits intact and offers reload. A lost save

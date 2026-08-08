@@ -33,7 +33,7 @@ The public hackathon release ships **in-app reminders only**, as recorded in [Ap
 
 The event compiler skips completed, cancelled, deleted, or out-of-range source records. It cancels pending events when a source record, timetable exception, or preference change makes them invalid. It never creates recurring Task or Assessment reminders because those records do not recur in v1.
 
-Kairo does not send repeated overdue notices in v1. An overdue record remains visible in `/deadlines`, Canvas, and the relevant detail route. A reminder missed after its expiry is marked expired rather than replayed on every later visit.
+Kairo does not send repeated overdue notices in v1. An overdue record remains available to Canvas inference and visible in the relevant detail route. A reminder missed after its expiry is marked expired rather than replayed on every later visit.
 
 ## Time and scheduling rules
 
@@ -154,7 +154,7 @@ By default, browser notices use generic copy such as `Kairo reminder` and `A dea
 - Kumo toasts remain an accessible status/live region, keep a text label for every action, and do not move focus away from the completed control.
 - Reminder text must state the event and the next action without relying on color, sound, vibration, or a precise time format alone. The destination route remains usable by keyboard and touch.
 - In-app reminder settings expose the current category states and never imply an OS-level delivery guarantee.
-- Quiet hours, disabled categories, and unavailable browsers fall back to the same route data. Users can always find overdue work in `/deadlines` and the related detail route.
+- Quiet hours, disabled categories, and unavailable browsers fall back to the same source data. Users can ask Canvas about overdue work or open the related detail route.
 
 ## Privacy and operations
 

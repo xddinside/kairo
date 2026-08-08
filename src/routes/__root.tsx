@@ -55,7 +55,7 @@ export const Route = createRootRoute({
   shellComponent: RootDocument,
 });
 
-const workspacePath = /^\/(canvas(?:\/|$)|courses(?:\/|$)|tasks(?:\/|$)|timetable(?:\/|$)|deadlines(?:\/|$)|notes(?:\/|$)|focus(?:\/|$))/;
+const workspacePath = /^\/(canvas(?:\/|$)|courses(?:\/|$)|tasks(?:\/|$)|timetable(?:\/|$)|notes(?:\/|$)|focus(?:\/|$))/;
 
 function RootRoute() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });

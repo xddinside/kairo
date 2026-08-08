@@ -8,7 +8,6 @@ const safeMethods = new Set(["GET", "HEAD", "OPTIONS"]);
 const privateRouteRoots = [
   "/canvas",
   "/courses",
-  "/deadlines",
   "/files",
   "/focus",
   "/notes",
