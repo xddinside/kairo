@@ -19,7 +19,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { z } from "zod";
 
 import {
@@ -82,6 +82,8 @@ function TasksRoute() {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [errors, setErrors] = useState<ReadonlyArray<AcademicFieldError>>([]);
+  const [filters, setFilters] = useState(search);
+  useEffect(() => setFilters(search), [search]);
 
   const create = async (values: AcademicFormValues) => {
     setPending(true);
@@ -105,13 +107,24 @@ function TasksRoute() {
   const submitSearch = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const q = String(new FormData(event.currentTarget).get("q") ?? "").trim();
-    void navigate({ search: (previous) => ({ ...previous, q: q || undefined, cursor: undefined }), replace: true });
+    const next = { ...filters, q: q || undefined, cursor: undefined };
+    setFilters(next);
+    void navigate({ search: next, replace: true });
   };
 
-  const setFilter = (next: Record<string, string | undefined>) =>
-    void navigate({ search: (previous) => ({ ...previous, ...next, cursor: undefined }) });
+  const setFilter = (next: Record<string, string | undefined>) => {
+    const value = { ...filters, ...next, cursor: undefined };
+    setFilters(value);
+    void navigate({ search: value, replace: true });
+  };
 
-  const filtered = Boolean(search.q || search.courseId || search.assessment || search.status !== "open" || search.window !== "all");
+  const filtered = Boolean(filters.q || filters.courseId || filters.assessment || filters.status !== "open" || filters.window !== "all");
+  const visibleItems = page.items.filter((task) =>
+    (!filters.q || task.title.toLocaleLowerCase().includes(filters.q.toLocaleLowerCase())) &&
+    (!filters.courseId || task.courseId === filters.courseId) &&
+    (!filters.assessment || (filters.assessment === "none" ? task.assessmentId === null : task.assessmentId === filters.assessment)) &&
+    (!filters.status || filters.status === "all" || task.status === filters.status),
+  );
   const today = new Date().toISOString().slice(0, 10);
 
   return (
@@ -211,7 +224,7 @@ function TasksRoute() {
               <Tabs
                 variant="segmented"
                 size="sm"
-                value={search.status ?? "open"}
+                value={filters.status ?? "open"}
                 onValueChange={(status) => {
                   setFilter({ status: status || "open" });
                 }}
@@ -229,7 +242,7 @@ function TasksRoute() {
               <Select
                 aria-label="Course"
                 size="lg"
-                value={search.courseId ?? "all"}
+                value={filters.courseId ?? "all"}
                 onValueChange={(value) => {
                   if (value === null) return;
                   setFilter({ courseId: value === "all" ? undefined : value });
@@ -243,7 +256,7 @@ function TasksRoute() {
               <Select
                 aria-label="Assessment"
                 size="lg"
-                value={search.assessment ?? "all"}
+                value={filters.assessment ?? "all"}
                 onValueChange={(value) => {
                   if (value === null) return;
                   setFilter({
@@ -260,7 +273,7 @@ function TasksRoute() {
               <Select
                 aria-label="Due window"
                 size="lg"
-                value={search.window ?? "all"}
+                value={filters.window ?? "all"}
                 onValueChange={(value) => {
                   if (value === null) return;
                   setFilter({
@@ -278,7 +291,7 @@ function TasksRoute() {
               <Select
                 aria-label="Sort"
                 size="lg"
-                value={search.sort ?? "due_asc"}
+                value={filters.sort ?? "due_asc"}
                 onValueChange={(value) => {
                   if (value === null) return;
                   setFilter({ sort: value });
@@ -291,13 +304,13 @@ function TasksRoute() {
                 className="w-full"
               />
             </div>
-            {search.window === "custom" ? (
+            {filters.window === "custom" ? (
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="grid gap-1.5 text-sm font-medium">
                   From
                   <Input
                     type="date"
-                    defaultValue={search.from ?? ""}
+                    value={filters.from ?? ""}
                     onChange={(event) => setFilter({ from: event.target.value || undefined })}
                   />
                 </label>
@@ -305,7 +318,7 @@ function TasksRoute() {
                   To
                   <Input
                     type="date"
-                    defaultValue={search.to ?? ""}
+                    value={filters.to ?? ""}
                     onChange={(event) => setFilter({ to: event.target.value || undefined })}
                   />
                 </label>
@@ -336,7 +349,7 @@ function TasksRoute() {
             </p>
           ) : null}
 
-          {page.items.length === 0 ? (
+          {visibleItems.length === 0 ? (
             <LayerCard>
               <Empty
                 size="base"
@@ -377,7 +390,7 @@ function TasksRoute() {
           ) : (
             <LayerCard>
               <ol className="divide-y divide-kumo-line">
-                {page.items.map((task) => (
+                {visibleItems.map((task) => (
                   <TaskRow key={task.id} task={task} today={today} />
                 ))}
               </ol>

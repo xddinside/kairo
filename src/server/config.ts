@@ -18,6 +18,7 @@ export interface ServerConfigShape {
   readonly fileStorageSecretAccessKey: Option.Option<Redacted.Redacted<string>>;
   readonly fileStorageSigningSecret: Option.Option<Redacted.Redacted<string>>;
   readonly cronSecret: Option.Option<Redacted.Redacted<string>>;
+  readonly openCodeGoApiKey: Option.Option<Redacted.Redacted<string>>;
 }
 
 export class ServerConfig extends Context.Service<ServerConfig, ServerConfigShape>()(
@@ -58,6 +59,7 @@ const readServerConfig = Effect.gen(function* () {
     fileStorageSecretAccessKey: yield* optionalSecret("FILE_STORAGE_SECRET_ACCESS_KEY"),
     fileStorageSigningSecret: yield* optionalSecret("FILE_STORAGE_SIGNING_SECRET"),
     cronSecret: yield* optionalSecret("CRON_SECRET"),
+    openCodeGoApiKey: yield* optionalSecret("OPENCODE_GO_API_KEY"),
   };
 });
 
@@ -113,6 +115,7 @@ const validateServerConfig = Effect.fn("ServerConfig.validate")(function* (
     if (!hasValue(config.fileStorageAccessKeyId)) fields.push("FILE_STORAGE_ACCESS_KEY_ID");
     if (!hasValue(config.fileStorageSecretAccessKey)) fields.push("FILE_STORAGE_SECRET_ACCESS_KEY");
     if (!hasValue(config.fileStorageSigningSecret)) fields.push("FILE_STORAGE_SIGNING_SECRET");
+    if (!hasValue(config.openCodeGoApiKey)) fields.push("OPENCODE_GO_API_KEY");
   }
 
   if (fields.length > 0) {

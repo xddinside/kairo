@@ -38,6 +38,7 @@ describe("server configuration", () => {
       if (error instanceof InvalidServerConfig) {
         expect(error.fields).toContain("CLERK_SECRET_KEY");
         expect(error.fields).toContain("DATABASE_URL");
+        expect(error.fields).toContain("OPENCODE_GO_API_KEY");
       }
     }
   });

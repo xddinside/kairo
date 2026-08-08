@@ -5,7 +5,7 @@ import { Input } from "@cloudflare/kumo/components/input";
 import { LayerCard } from "@cloudflare/kumo/components/layer-card";
 import { CalendarCheck, Check, Clock, FunnelSimple, MagnifyingGlass, Plus, Trash, WarningCircle, X } from "@phosphor-icons/react";
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { startTransition, useState } from "react";
+import { startTransition, useEffect, useState } from "react";
 import { z } from "zod";
 
 import { AcademicError, AcademicLoading, AcademicToast } from "../components/academic/academic-feedback";
@@ -32,23 +32,26 @@ export const Route = createFileRoute("/deadlines")({
 function DeadlinesRoute() {
   const { page, courses, assessments, from, to, timeZone } = Route.useLoaderData(); const search = Route.useSearch(); const navigate = Route.useNavigate(); const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false); const [createKind, setCreateKind] = useState<"task" | "assessment">("task"); const [selected, setSelected] = useState<Assessment>(); const [deleteRow, setDeleteRow] = useState<Deadline>(); const [pending, setPending] = useState(false); const [errors, setErrors] = useState<ReadonlyArray<AcademicFieldError>>([]); const [notice, setNotice] = useState<{ readonly message: string; readonly token?: string }>();
+  const [filters, setFilters] = useState(search); const [rows, setRows] = useState(page.items);
+  useEffect(() => setFilters(search), [search]); useEffect(() => setRows(page.items), [page.items]);
   const refresh = () => startTransition(() => void router.invalidate());
   const handle = (result: Awaited<ReturnType<typeof createTask>>, message: string) => { if (result._tag === "invalid") { setErrors(result.fields); return false; } if (result._tag === "conflict") { setErrors([{ field: "form", message: result.reason === "has_dependents" ? "This assessment has linked tasks and cannot be deleted." : "This record changed elsewhere. Reload before trying again." }]); return false; } if (result._tag !== "applied" && result._tag !== "already_applied") { setErrors([{ field: "form", message: result._tag === "not_found" ? "This record is no longer available." : "The change could not be saved. Retry when ready." }]); return false; } setNotice({ message, token: result.undoToken }); refresh(); return true; };
   const create = async (values: AcademicFormValues) => { setPending(true); setErrors([]); try { const result = createKind === "task" ? await createTask({ data: values }) : await createAssessment({ data: { title: values.title, details: values.details, courseId: values.courseId, dueDate: values.dueDate, dueTime: values.dueTime, idempotencyKey: values.idempotencyKey } }); if (handle(result, `${createKind === "task" ? "Task" : "Assessment"} created.`)) setCreateOpen(false); } finally { setPending(false); } };
   const openAssessment = async (id: string) => { setErrors([]); const value = await getAssessment({ data: id }); if (value && !Array.isArray(value) && "status" in value && !("assessmentId" in value)) setSelected(value); else setNotice({ message: "This assessment is no longer available. Reloading deadlines." }); };
   const update = async (values: AcademicFormValues) => { if (!selected) return; setPending(true); setErrors([]); try { const { idempotencyKey, ...patch } = values; if (handle(await updateAssessment({ data: { assessmentId: selected.id, expectedVersion: selected.version, patch, idempotencyKey } }), "Assessment updated.")) setSelected(undefined); } finally { setPending(false); } };
-  const status = async (row: Deadline, next: AcademicStatus) => { setPending(true); setErrors([]); try { const input = { id: row.id, expectedVersion: row.version, status: next, idempotencyKey: crypto.randomUUID() }; const result = row.kind === "task" ? await setTaskStatus({ data: input }) : await setAssessmentStatus({ data: input }); handle(result, next === "open" ? `${label(row)} reopened.` : next === "completed" ? `${label(row)} completed.` : `${label(row)} cancelled.`); } finally { setPending(false); } };
+  const status = async (row: Deadline, next: AcademicStatus) => { const previous = rows; setRows((current) => current.map((item) => item.id === row.id && item.kind === row.kind ? { ...item, status: next, version: item.version + 1 } : item)); setPending(true); setErrors([]); try { const input = { id: row.id, expectedVersion: row.version, status: next, idempotencyKey: crypto.randomUUID() }; const result = row.kind === "task" ? await setTaskStatus({ data: input }) : await setAssessmentStatus({ data: input }); if (!handle(result, next === "open" ? `${label(row)} reopened.` : next === "completed" ? `${label(row)} completed.` : `${label(row)} cancelled.`)) setRows(previous); } catch (error) { setRows(previous); throw error; } finally { setPending(false); } };
   const remove = async () => { if (!deleteRow) return; setPending(true); setErrors([]); try { const input = { id: deleteRow.id, expectedVersion: deleteRow.version, idempotencyKey: crypto.randomUUID() }; const result = deleteRow.kind === "task" ? await deleteTask({ data: input }) : await deleteAssessment({ data: input }); if (handle(result, `${label(deleteRow)} deleted.`)) setDeleteRow(undefined); } finally { setPending(false); } };
   const undo = async () => { if (!notice?.token) return; const result = await undoAcademicCommand({ data: { token: notice.token, idempotencyKey: crypto.randomUUID() } }); setNotice({ message: result._tag === "applied" ? "Change undone." : "This change can no longer be undone. Reload to see current data." }); if (result._tag === "applied") refresh(); };
   const submitSearch = (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); const q = String(new FormData(event.currentTarget).get("q") ?? "").trim(); void navigate({ search: (previous) => ({ ...previous, q: q || undefined, cursor: undefined }), replace: true }); };
-  const setFilter = (next: Record<string, string | boolean | undefined>) => void navigate({ search: (previous) => ({ ...previous, ...next, cursor: undefined }) });
-  const overdue = page.items.filter((row) => row.status === "open" && row.dueDate < from);
-  const upcoming = page.items.filter((row) => !(row.status === "open" && row.dueDate < from));
+  const setFilter = (next: Record<string, string | boolean | undefined>) => { const value = { ...filters, ...next, cursor: undefined }; setFilters(value); void navigate({ search: value, replace: true }); };
+  const visibleRows = rows.filter((row) => (!filters.kind || filters.kind === "all" || row.kind === filters.kind) && (!filters.status || filters.status === "all" || row.status === filters.status) && (!filters.courseId || row.courseId === filters.courseId));
+  const overdue = visibleRows.filter((row) => row.status === "open" && row.dueDate < from);
+  const upcoming = visibleRows.filter((row) => !(row.status === "open" && row.dueDate < from));
   const grouped = new Map<string, Array<Deadline>>();
   for (const row of upcoming) grouped.set(row.dueDate, [...(grouped.get(row.dueDate) ?? []), row]);
-  const openCount = page.items.filter((row) => row.status === "open").length;
-  const assessmentCount = page.items.filter((row) => row.kind === "assessment").length;
-  const filtered = Boolean(search.q || search.kind !== "all" || search.status !== "open" || search.courseId || search.from || search.to || search.includeOverdue === false);
+  const openCount = visibleRows.filter((row) => row.status === "open").length;
+  const assessmentCount = visibleRows.filter((row) => row.kind === "assessment").length;
+  const filtered = Boolean(filters.q || filters.kind !== "all" || filters.status !== "open" || filters.courseId || filters.from || filters.to || filters.includeOverdue === false);
 
   return <AcademicShell><div className="min-h-full bg-kumo-canvas text-base text-kumo-default"><main className="mx-auto w-full max-w-6xl px-4 py-8 pb-24 sm:px-7 lg:px-10 lg:py-12">
     <header className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">

@@ -3,16 +3,20 @@ import { WarningCircle } from "@phosphor-icons/react";
 import { createFileRoute, notFound } from "@tanstack/react-router";
 
 import { SavedCanvas } from "../components/canvas/saved-canvas";
+import { listTasks } from "../server/academic/functions";
 import { getCanvas } from "../server/canvas/functions";
 
 export const Route = createFileRoute("/canvas/$canvasId")({
   loader: async ({ params }) => {
-    const detail = await getCanvas({ data: { canvasId: params.canvasId } });
+    const [detail, tasks] = await Promise.all([
+      getCanvas({ data: { canvasId: params.canvasId } }),
+      listTasks({ data: { q: "", status: "all", courseId: null, assessment: null, window: "all", from: null, to: null, sort: "due_asc", pageSize: 100, cursor: null } }),
+    ]);
     if (!detail) throw notFound();
-    return detail;
+    return { detail, tasks: tasks.items };
   },
   head: ({ loaderData }) => ({
-    meta: [{ title: `${loaderData?.canvas.title ?? "Canvas"} · Kairo` }],
+    meta: [{ title: `${loaderData?.detail.canvas.title ?? "Canvas"} · Kairo` }],
   }),
   pendingComponent: CanvasLoading,
   errorComponent: CanvasError,
@@ -20,7 +24,8 @@ export const Route = createFileRoute("/canvas/$canvasId")({
 });
 
 function SavedCanvasRoute() {
-  return <SavedCanvas detail={Route.useLoaderData()} />;
+  const data = Route.useLoaderData();
+  return <SavedCanvas detail={data.detail} tasks={data.tasks} />;
 }
 
 function CanvasLoading() {

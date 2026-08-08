@@ -80,6 +80,8 @@ function CoursesRoute() {
     readonly message: string;
     readonly token?: string;
   }>();
+  const [queryInput, setQueryInput] = useState(search.q ?? "");
+  const [lifecycleInput, setLifecycleInput] = useState(search.lifecycle ?? "current");
 
   useEffect(() => {
     const stored = sessionStorage.getItem("kairo.academic.notice");
@@ -104,7 +106,7 @@ function CoursesRoute() {
     }
   }, []);
 
-  const query = search.q?.trim().toLocaleLowerCase() ?? "";
+  const query = queryInput.trim().toLocaleLowerCase();
   const visible = courses.filter(
     (course) =>
       !query ||
@@ -170,6 +172,7 @@ function CoursesRoute() {
     const q = String(
       new FormData(event.currentTarget).get("q") ?? "",
     ).trim();
+    setQueryInput(q);
     void navigate({
       search: (previous) => ({ ...previous, q: q || undefined }),
       replace: true,
@@ -267,7 +270,8 @@ function CoursesRoute() {
                     id="course-search"
                     name="q"
                     type="search"
-                    defaultValue={search.q ?? ""}
+                    value={queryInput}
+                    onChange={(event) => setQueryInput(event.target.value)}
                     placeholder="Search courses"
                   />
                 </InputGroup>
@@ -278,9 +282,10 @@ function CoursesRoute() {
               <Select
                 aria-label="Course state"
                 size="lg"
-                value={search.lifecycle ?? "current"}
+                value={lifecycleInput}
                 onValueChange={(lifecycle) => {
                   if (lifecycle === null) return;
+                  setLifecycleInput(lifecycle);
                   void navigate({
                     search: (previous) => ({ ...previous, lifecycle }),
                   });

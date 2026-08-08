@@ -1,10 +1,12 @@
 import { Button } from "@cloudflare/kumo/components/button";
 import { Text } from "@cloudflare/kumo/components/text";
-import { BookOpen, CalendarBlank, ListChecks, X } from "@phosphor-icons/react";
+import { BookOpen, CalendarBlank, Database, ListChecks, X } from "@phosphor-icons/react";
 import { useRouter } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 
 import { createCanvas } from "../../server/canvas/functions";
+import { seedDemoData } from "../../server/demo-data/functions";
+import { generateCanvasView } from "../../server/generation/functions";
 
 const suggestions = [
   { text: "What should I work on right now? Give me 2\u20133 things.", icon: ListChecks },
@@ -24,6 +26,7 @@ export function CanvasHome() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
   const [dismissed, setDismissed] = useState<ReadonlyArray<string>>([]);
+  const [seedState, setSeedState] = useState<"idle" | "pending" | "success" | "error">("idle");
 
   const submitRequest = async (request: string) => {
     const text = request.trim();
@@ -38,13 +41,33 @@ export function CanvasHome() {
           activity: { kind: "request", text, sourceViewId: null, fileIds: [] },
         },
       });
+      const generated = await generateCanvasView({
+        data: {
+          canvasId: result.canvas.id,
+          requestActivityId: result.activity.id,
+          expectedVersion: result.canvas.version,
+          clientRequestId: crypto.randomUUID(),
+        },
+      });
+      if (generated._tag === "clarification_required") {
+        sessionStorage.setItem(`kairo:clarification:${result.canvas.id}`, JSON.stringify({
+          ...generated,
+          requestActivityId: result.activity.id,
+          expectedVersion: result.canvas.version,
+        }));
+      } else if (generated._tag !== "view_ready") {
+        sessionStorage.setItem(`kairo:recovery:${result.canvas.id}`, JSON.stringify({
+          requestActivityId: result.activity.id,
+          expectedVersion: result.canvas.version,
+        }));
+      }
       await router.navigate({
         to: "/canvas/$canvasId",
         params: { canvasId: result.canvas.id },
       });
       void router.invalidate();
     } catch {
-      setError("Canvas could not be saved. Try again.");
+      setError("Kairo could not generate this view. Try again.");
     } finally {
       setPending(false);
     }
@@ -53,6 +76,18 @@ export function CanvasHome() {
   const submit = (event: FormEvent) => {
     event.preventDefault();
     void submitRequest(prompt);
+  };
+
+  const seed = async () => {
+    if (seedState === "pending") return;
+    setSeedState("pending");
+    try {
+      await seedDemoData();
+      setSeedState("success");
+      void router.invalidate();
+    } catch {
+      setSeedState("error");
+    }
   };
 
   const visible = suggestions.filter(
@@ -87,9 +122,23 @@ export function CanvasHome() {
             disabled={pending}
             className="shrink-0 rounded-full text-lg transition-transform duration-150 ease-out active:not-disabled:scale-[0.96]"
           >
-            {pending ? "Saving" : "Generate"}
+            {pending ? "Generating" : "Generate"}
           </Button>
         </form>
+
+        <div className="grid justify-items-center gap-1.5">
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={seedState === "pending" || seedState === "success"}
+            onClick={() => void seed()}
+            icon={<Database aria-hidden="true" size={16} />}
+            className="transition-transform duration-150 ease-out active:not-disabled:scale-[0.96]"
+          >
+            {seedState === "pending" ? "Seeding" : seedState === "success" ? "Demo data ready" : "Seed demo data"}
+          </Button>
+          {seedState === "error" ? <p role="alert" className="text-sm text-kumo-danger">Could not seed demo data.</p> : null}
+        </div>
 
         {error ? (
           <p role="alert" className="text-base text-kumo-danger">

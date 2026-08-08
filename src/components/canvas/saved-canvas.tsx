@@ -4,13 +4,16 @@ import { LayerCard } from "@cloudflare/kumo/components/layer-card";
 import { Text } from "@cloudflare/kumo/components/text";
 import { CaretLeft, CaretRight, PencilSimple } from "@phosphor-icons/react";
 import { useRouter } from "@tanstack/react-router";
-import { startTransition, useState, type FormEvent } from "react";
+import { startTransition, useRef, useState, type FormEvent } from "react";
 
+import type { Task } from "../../server/academic/domain";
 import type { CanvasDetail } from "../../server/canvas/domain";
 import {
   appendCanvasActivity,
   renameCanvas,
 } from "../../server/canvas/functions";
+import { generateCanvasView } from "../../server/generation/functions";
+import { GeneratedView } from "./generated-view";
 
 const formatStamp = (value: string): string =>
   new Date(value).toLocaleString(undefined, {
@@ -21,8 +24,39 @@ const formatStamp = (value: string): string =>
     minute: "2-digit",
   });
 
+type ClarificationState = { readonly questionId: string; readonly question: string; readonly requestActivityId: string; readonly expectedVersion: number };
+
+const initialClarification = (canvasId: string): ClarificationState | undefined => {
+  if (typeof window === "undefined") return undefined;
+  const key = `kairo:clarification:${canvasId}`;
+  const stored = sessionStorage.getItem(key);
+  sessionStorage.removeItem(key);
+  if (!stored) return undefined;
+  try {
+    const value: unknown = JSON.parse(stored);
+    if (!value || typeof value !== "object") return undefined;
+    if (!("questionId" in value) || !("question" in value) || !("requestActivityId" in value) || !("expectedVersion" in value)) return undefined;
+    if (typeof value.questionId !== "string" || typeof value.question !== "string" || typeof value.requestActivityId !== "string" || typeof value.expectedVersion !== "number") return undefined;
+    return { questionId: value.questionId, question: value.question, requestActivityId: value.requestActivityId, expectedVersion: value.expectedVersion };
+  } catch { return undefined; }
+};
+
+const initialRecovery = (canvasId: string): { readonly requestActivityId: string; readonly expectedVersion: number } | undefined => {
+  if (typeof window === "undefined") return undefined;
+  const key = `kairo:recovery:${canvasId}`;
+  const stored = sessionStorage.getItem(key);
+  sessionStorage.removeItem(key);
+  if (!stored) return undefined;
+  try {
+    const value: unknown = JSON.parse(stored);
+    if (!value || typeof value !== "object" || !("requestActivityId" in value) || !("expectedVersion" in value)) return undefined;
+    if (typeof value.requestActivityId !== "string" || typeof value.expectedVersion !== "number") return undefined;
+    return { requestActivityId: value.requestActivityId, expectedVersion: value.expectedVersion };
+  } catch { return undefined; }
+};
+
 /** Saved Canvas activity and immutable Generated view history surface. */
-export function SavedCanvas({ detail }: { readonly detail: CanvasDetail }) {
+export function SavedCanvas({ detail, tasks }: { readonly detail: CanvasDetail; readonly tasks: ReadonlyArray<Task> }) {
   const router = useRouter();
   const [selectedIndex, setSelectedIndex] = useState(
     Math.max(0, detail.history.length - 1),
@@ -31,6 +65,13 @@ export function SavedCanvas({ detail }: { readonly detail: CanvasDetail }) {
   const [title, setTitle] = useState(detail.canvas.title ?? "Untitled canvas");
   const [renaming, setRenaming] = useState(false);
   const [pending, setPending] = useState(false);
+  const recoveredGeneration = initialRecovery(detail.canvas.id);
+  const [recovery, setRecovery] = useState(Boolean(recoveredGeneration));
+  const [clarification, setClarification] = useState<ClarificationState | undefined>(() => initialClarification(detail.canvas.id));
+  const [lastGeneration, setLastGeneration] = useState<{ readonly requestActivityId: string; readonly expectedVersion: number } | undefined>(recoveredGeneration);
+  const generationToken = useRef(0);
+  const canvasVersion = useRef(detail.canvas.version);
+  if (detail.canvas.version > canvasVersion.current) canvasVersion.current = detail.canvas.version;
   const selected = detail.history[selectedIndex];
   const archived = detail.canvas.state === "archived";
 
@@ -58,7 +99,7 @@ export function SavedCanvas({ detail }: { readonly detail: CanvasDetail }) {
       const result = await appendCanvasActivity({
         data: {
           canvasId: detail.canvas.id,
-          expectedVersion: detail.canvas.version,
+          expectedVersion: canvasVersion.current,
           clientRequestId: crypto.randomUUID(),
           activity: {
             kind: "request",
@@ -69,11 +110,92 @@ export function SavedCanvas({ detail }: { readonly detail: CanvasDetail }) {
         },
       });
       if (result._tag !== "activity_appended") return;
+      canvasVersion.current = result.canvas.version;
       setPrompt("");
-      startTransition(() => void router.invalidate());
+      setLastGeneration({ requestActivityId: result.activity.id, expectedVersion: result.canvas.version });
+      const token = ++generationToken.current;
+      const generated = await generateCanvasView({ data: {
+        canvasId: detail.canvas.id,
+        requestActivityId: result.activity.id,
+        expectedVersion: result.canvas.version,
+        clientRequestId: crypto.randomUUID(),
+      } });
+      if (token !== generationToken.current) return;
+      if (generated._tag === "clarification_required") {
+        setClarification({ ...generated, requestActivityId: result.activity.id, expectedVersion: result.canvas.version });
+        setRecovery(false);
+      } else if (generated._tag === "view_ready") {
+        setClarification(undefined);
+        setRecovery(false);
+        startTransition(() => void router.invalidate());
+      } else {
+        setRecovery(true);
+      }
     } finally {
       setPending(false);
     }
+  };
+
+  const answerClarification = async (answer: string) => {
+    if (!clarification || !answer.trim() || pending) return;
+    setPending(true);
+    try {
+      const appended = await appendCanvasActivity({ data: {
+        canvasId: detail.canvas.id,
+        expectedVersion: canvasVersion.current,
+        clientRequestId: crypto.randomUUID(),
+        activity: { kind: "clarification_answer", questionId: clarification.questionId, text: answer.trim() },
+      } });
+      if (appended._tag !== "activity_appended") { setRecovery(true); return; }
+      canvasVersion.current = appended.canvas.version;
+      setLastGeneration({ requestActivityId: clarification.requestActivityId, expectedVersion: appended.canvas.version });
+      const generated = await generateCanvasView({ data: {
+        canvasId: detail.canvas.id,
+        requestActivityId: clarification.requestActivityId,
+        expectedVersion: appended.canvas.version,
+        clientRequestId: crypto.randomUUID(),
+      } });
+      if (generated._tag === "view_ready") {
+        setClarification(undefined);
+        setRecovery(false);
+        startTransition(() => void router.invalidate());
+      } else if (generated._tag === "clarification_required") {
+        setClarification({ ...generated, requestActivityId: clarification.requestActivityId, expectedVersion: appended.canvas.version });
+      } else setRecovery(true);
+    } finally { setPending(false); }
+  };
+
+  const cancelGeneration = () => {
+    generationToken.current += 1;
+    setPending(false);
+    setRecovery(false);
+  };
+
+  const recordAction = async (action: string, input: unknown) => {
+    const result = await appendCanvasActivity({ data: {
+      canvasId: detail.canvas.id,
+      expectedVersion: canvasVersion.current,
+      clientRequestId: crypto.randomUUID(),
+      activity: { kind: "accepted_action", action, input },
+    } });
+    if (result._tag === "activity_appended") canvasVersion.current = result.canvas.version;
+  };
+
+  const retryGeneration = async () => {
+    if (!lastGeneration || pending) return;
+    setPending(true);
+    setRecovery(false);
+    try {
+      const generated = await generateCanvasView({ data: {
+        canvasId: detail.canvas.id,
+        requestActivityId: lastGeneration.requestActivityId,
+        expectedVersion: lastGeneration.expectedVersion,
+        clientRequestId: crypto.randomUUID(),
+      } });
+      if (generated._tag === "view_ready") startTransition(() => void router.invalidate());
+      else if (generated._tag === "clarification_required") setClarification({ ...generated, ...lastGeneration });
+      else setRecovery(true);
+    } finally { setPending(false); }
   };
 
   return (
@@ -149,15 +271,8 @@ export function SavedCanvas({ detail }: { readonly detail: CanvasDetail }) {
                   </time>
                 </LayerCard.Secondary>
                 <LayerCard.Primary className="gap-4 px-5 py-4">
-                  {selected.rationale ? (
-                    <p className="text-sm leading-6 text-kumo-subtle">
-                      {selected.rationale}
-                    </p>
-                  ) : (
-                    <p className="text-sm leading-6 text-kumo-subtle">
-                      This view has no rationale recorded.
-                    </p>
-                  )}
+                  <GeneratedView spec={selected.spec} tasks={tasks} onAction={recordAction} />
+                  {selected.rationale ? <p className="border-t border-kumo-line pt-4 text-sm leading-6 text-kumo-subtle">{selected.rationale}</p> : null}
                 </LayerCard.Primary>
               </LayerCard>
             ) : (
@@ -173,6 +288,19 @@ export function SavedCanvas({ detail }: { readonly detail: CanvasDetail }) {
               </LayerCard>
             )}
           </section>
+
+          {clarification ? (
+            <LayerCard className="px-5 py-5">
+              <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); void answerClarification(prompt); }}>
+                <Text as="h2" variant="heading3">{clarification.question}</Text>
+                <div className="flex gap-2"><Input value={prompt} onChange={(event) => setPrompt(event.target.value)} aria-label="Clarification answer" /><Button type="submit" disabled={pending || !prompt.trim()}>Continue</Button></div>
+              </form>
+            </LayerCard>
+          ) : null}
+
+          {recovery ? (
+            <LayerCard className="px-5 py-5"><div className="grid gap-4"><Text as="h2" variant="heading3">Kairo couldn’t update this view</Text><div className="flex gap-2"><Button onClick={() => void retryGeneration()}>Try again</Button>{selected ? <Button variant="secondary" onClick={() => setRecovery(false)}>Use last view</Button> : null}</div></div></LayerCard>
+          ) : null}
 
           {detail.history.length > 1 ? (
             <nav
@@ -233,6 +361,7 @@ export function SavedCanvas({ detail }: { readonly detail: CanvasDetail }) {
             >
               {pending ? "Sending" : "Generate"}
             </Button>
+            {pending ? <Button variant="ghost" size="base" type="button" onClick={cancelGeneration}>Cancel</Button> : null}
           </form>
         </div>
       </div>

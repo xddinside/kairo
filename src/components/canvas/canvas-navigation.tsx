@@ -85,6 +85,9 @@ export function CanvasNavigation({
   const [renameTarget, setRenameTarget] = useState<CanvasSummary>();
   const [renameValue, setRenameValue] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [optimisticPath, setOptimisticPath] = useState(pathname);
+
+  useEffect(() => setOptimisticPath(pathname), [pathname]);
 
   useEffect(() => {
     if (!query.trim()) setResults(recent);
@@ -93,6 +96,7 @@ export function CanvasNavigation({
   const navigate = (to: string) => (event: MouseEvent<HTMLElement>) => {
     if (!isRoutedClick(event)) return;
     event.preventDefault();
+    setOptimisticPath(to);
     setMenuOpen(false);
     void router.navigate({ to });
   };
@@ -271,7 +275,7 @@ export function CanvasNavigation({
               <Sidebar.GroupLabel className="text-base">Your work</Sidebar.GroupLabel>
               <Sidebar.Menu>
                 {workRoutes.map(({ to, label, icon: Icon }) => {
-                  const current = pathname === to || pathname.startsWith(`${to}/`);
+                  const current = optimisticPath === to || optimisticPath.startsWith(`${to}/`);
                   return (
                     <Sidebar.MenuButton
                       key={to}

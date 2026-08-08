@@ -41,6 +41,9 @@ function NotesRoute() {
   const [pending, setPending] = useState(false);
   const [errors, setErrors] = useState<ReadonlyArray<NoteFieldError>>([]);
   const [notice, setNotice] = useState<{ readonly message: string; readonly token?: string }>();
+  const [queryInput, setQueryInput] = useState(search.q ?? "");
+  const [courseInput, setCourseInput] = useState(search.courseId);
+  const [sortInput, setSortInput] = useState(search.sort ?? "updated_desc");
 
   useEffect(() => {
     const stored = sessionStorage.getItem("kairo.note.notice");
@@ -60,6 +63,7 @@ function NotesRoute() {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const q = String(form.get("q") ?? "").trim();
+    setQueryInput(q);
     void navigate({ search: (previous) => ({ ...previous, q: q || undefined, cursor: undefined }), replace: true });
   };
 
@@ -83,7 +87,11 @@ function NotesRoute() {
     if (result._tag === "applied") startTransition(() => void router.invalidate());
   };
 
-  const filtered = Boolean(search.q || search.courseId);
+  const filtered = Boolean(queryInput || courseInput);
+  const visibleItems = data.items.filter((note) =>
+    (!queryInput || note.title.toLocaleLowerCase().includes(queryInput.toLocaleLowerCase()) || note.preview.toLocaleLowerCase().includes(queryInput.toLocaleLowerCase())) &&
+    (!courseInput || (courseInput === "none" ? note.courseId === null : note.courseId === courseInput)),
+  );
   const openCreate = () => { setErrors([]); setCreateOpen(true); };
   return (
     <NoteShell>
@@ -100,21 +108,21 @@ function NotesRoute() {
         </div>
 
         <div className="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
-          <form onSubmit={submitSearch} className="flex gap-2"><label className="sr-only" htmlFor="note-search">Search Notes</label><Input id="note-search" name="q" type="search" defaultValue={search.q ?? ""} placeholder="Search Notes" className="text-base sm:text-sm" /><Button type="submit" variant="secondary" shape="square" aria-label="Search Notes" icon={<MagnifyingGlass aria-hidden="true" size={18} />} /></form>
-          <label className="sr-only" htmlFor="note-sort">Sort Notes</label><select id="note-sort" value={search.sort ?? "updated_desc"} onChange={(event) => void navigate({ search: (previous) => ({ ...previous, sort: event.target.value as "updated_desc" | "created_desc" | "title_asc", cursor: undefined }) })} className="min-h-11 rounded-lg bg-kumo-base px-3 text-base ring ring-kumo-line focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kumo-focus sm:text-sm"><option value="updated_desc">Recently updated</option><option value="created_desc">Recently created</option><option value="title_asc">Title</option></select>
+          <form onSubmit={submitSearch} className="flex gap-2"><label className="sr-only" htmlFor="note-search">Search Notes</label><Input id="note-search" name="q" type="search" value={queryInput} onChange={(event) => setQueryInput(event.target.value)} placeholder="Search Notes" className="text-base sm:text-sm" /><Button type="submit" variant="secondary" shape="square" aria-label="Search Notes" icon={<MagnifyingGlass aria-hidden="true" size={18} />} /></form>
+          <label className="sr-only" htmlFor="note-sort">Sort Notes</label><select id="note-sort" value={sortInput} onChange={(event) => { const sort = event.target.value as "updated_desc" | "created_desc" | "title_asc"; setSortInput(sort); void navigate({ search: (previous) => ({ ...previous, sort, cursor: undefined }), replace: true }); }} className="min-h-11 rounded-lg bg-kumo-base px-3 text-base ring ring-kumo-line focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kumo-focus sm:text-sm"><option value="updated_desc">Recently updated</option><option value="created_desc">Recently created</option><option value="title_asc">Title</option></select>
         </div>
         <div className="mt-3 flex flex-wrap gap-2" aria-label="Filter by Course">
-          <FilterLink label="All" active={!search.courseId} onClick={() => void navigate({ search: (previous) => ({ ...previous, courseId: undefined, cursor: undefined }) })} />
-          <FilterLink label="No Course" active={search.courseId === "none"} onClick={() => void navigate({ search: (previous) => ({ ...previous, courseId: "none", cursor: undefined }) })} />
-          {data.courses.map((course) => <FilterLink key={course.id} label={course.title} active={search.courseId === course.id} onClick={() => void navigate({ search: (previous) => ({ ...previous, courseId: course.id, cursor: undefined }) })} />)}
+          <FilterLink label="All" active={!courseInput} onClick={() => { setCourseInput(undefined); void navigate({ search: (previous) => ({ ...previous, courseId: undefined, cursor: undefined }), replace: true }); }} />
+          <FilterLink label="No Course" active={courseInput === "none"} onClick={() => { setCourseInput("none"); void navigate({ search: (previous) => ({ ...previous, courseId: "none", cursor: undefined }), replace: true }); }} />
+          {data.courses.map((course) => <FilterLink key={course.id} label={course.title} active={courseInput === course.id} onClick={() => { setCourseInput(course.id); void navigate({ search: (previous) => ({ ...previous, courseId: course.id, cursor: undefined }), replace: true }); }} />)}
         </div>
 
-        <p role="status" className="mt-5 text-sm text-kumo-subtle">{data.items.length} {data.items.length === 1 ? "Note" : "Notes"}{data.hasNext ? " on this page" : ""}</p>
+        <p role="status" className="mt-5 text-sm text-kumo-subtle">{visibleItems.length} {visibleItems.length === 1 ? "Note" : "Notes"}{data.hasNext ? " on this page" : ""}</p>
         {data.invalidCursor ? <p role="status" className="mt-2 text-sm text-kumo-warning">That page link expired. Showing the first page.</p> : null}
-        {data.items.length === 0 ? (
+        {visibleItems.length === 0 ? (
           <LayerCard className="mt-5 px-6 py-10 text-center"><NoteBlank aria-hidden="true" size={28} className="mx-auto text-kumo-subtle" /><h2 className="mt-3 text-lg font-semibold">{filtered ? "No Notes match these filters" : "No Notes yet"}</h2><div className="mt-5 flex justify-center gap-2">{filtered ? <Button variant="secondary" onClick={() => void navigate({ search: { sort: search.sort, pageSize: search.pageSize } })}>Clear filters</Button> : null}<Button onClick={openCreate}>Create Note</Button></div></LayerCard>
         ) : (
-          <LayerCard className="mt-5"><ol className="divide-y divide-kumo-line">{data.items.map((note) => <li key={note.id} className="px-4 py-4 sm:px-5"><div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><Link to="/notes/$noteId" params={{ noteId: note.id }} search={{ mode: "view" }} className="text-sm font-medium text-kumo-strong underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kumo-focus">{note.title}</Link><div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-kumo-subtle">{note.courseTitle ? <Badge variant="secondary">{note.courseTitle}</Badge> : null}<time dateTime={note.updatedAt}>Updated {formatDate(note.updatedAt)}</time></div></div><Link to="/notes/$noteId" params={{ noteId: note.id }} search={{ mode: "view" }} className="flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-kumo-brand ring ring-kumo-line hover:bg-kumo-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kumo-focus">View</Link></div>{note.preview ? <p className="mt-3 line-clamp-2 max-w-[75ch] text-sm leading-relaxed text-kumo-subtle">{note.preview}</p> : null}</li>)}</ol></LayerCard>
+          <LayerCard className="mt-5"><ol className="divide-y divide-kumo-line">{visibleItems.map((note) => <li key={note.id} className="px-4 py-4 sm:px-5"><div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><Link to="/notes/$noteId" params={{ noteId: note.id }} search={{ mode: "view" }} className="text-sm font-medium text-kumo-strong underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kumo-focus">{note.title}</Link><div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-kumo-subtle">{note.courseTitle ? <Badge variant="secondary">{note.courseTitle}</Badge> : null}<time dateTime={note.updatedAt}>Updated {formatDate(note.updatedAt)}</time></div></div><Link to="/notes/$noteId" params={{ noteId: note.id }} search={{ mode: "view" }} className="flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-kumo-brand ring ring-kumo-line hover:bg-kumo-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kumo-focus">View</Link></div>{note.preview ? <p className="mt-3 line-clamp-2 max-w-[75ch] text-sm leading-relaxed text-kumo-subtle">{note.preview}</p> : null}</li>)}</ol></LayerCard>
         )}
         {data.hasNext && data.nextCursor ? <div className="mt-5 flex justify-end"><Button variant="secondary" onClick={() => void navigate({ search: (previous) => ({ ...previous, cursor: data.nextCursor ?? undefined }) })}>Next page</Button></div> : null}
       </main>
