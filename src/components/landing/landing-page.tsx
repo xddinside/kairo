@@ -88,14 +88,14 @@ function Hero() {
       </div>
 
       <div className="relative mx-auto flex w-full max-w-4xl flex-col items-center px-5 pt-20 pb-24 text-center sm:px-8 sm:pt-28 sm:pb-32">
-        <Reveal>
+        <Reveal immediate>
           <span className="inline-flex items-center gap-2 rounded-lg border border-kumo-line bg-white px-3.5 py-1.5 text-xs font-medium text-kumo-subtle">
             <span aria-hidden="true" className="size-1.5 animate-pulse-dot rounded-full bg-kumo-brand" />
             For students who’d rather do the work than fight the app
           </span>
         </Reveal>
 
-        <Reveal delay={90}>
+        <Reveal immediate delay={90}>
           <h1 className="mt-8 max-w-3xl text-balance text-4xl font-bold leading-[1.08] tracking-tight text-kumo-strong sm:text-6xl md:text-[4.25rem]">
             A workspace shaped around{" "}
             <em className="bg-gradient-to-r from-kumo-brand to-kumo-brand-hover bg-clip-text font-serif font-medium italic text-transparent">
@@ -104,7 +104,7 @@ function Hero() {
           </h1>
         </Reveal>
 
-        <Reveal delay={180}>
+        <Reveal immediate delay={180}>
           <p className="mx-auto mt-8 max-w-xl text-base leading-relaxed text-kumo-subtle sm:text-lg">
             Tell Kairo what you’re up against — an essay, a quiz, a whole week of
             deadlines — and it composes a calm workspace around exactly that.
@@ -112,11 +112,11 @@ function Hero() {
           </p>
         </Reveal>
 
-        <Reveal delay={270} className="mt-14 w-full max-w-2xl">
+        <Reveal immediate delay={270} className="mt-14 w-full max-w-2xl">
           <PromptDemo />
         </Reveal>
 
-        <Reveal delay={360}>
+        <Reveal immediate delay={360}>
           <p className="mt-10 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-sm font-medium text-kumo-inactive">
             <span>Free for students</span>
             <Spark strokeWidth={5} className="size-3 text-kumo-brand/40" aria-hidden="true" />
