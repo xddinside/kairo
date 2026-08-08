@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { createServer } from "node:net";
 import { env, exit } from "node:process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -12,6 +13,20 @@ import { Effect } from "effect";
 
 const databaseTestUrl = env.KAIRO_DATABASE_TEST_URL;
 
+const allocateLoopbackPort = (): Promise<number> => new Promise((resolve, reject) => {
+  const server = createServer();
+  server.unref();
+  server.once("error", reject);
+  server.listen({ host: "127.0.0.1", port: 0, exclusive: true }, () => {
+    const address = server.address();
+    if (!address || typeof address === "string") {
+      server.close(() => reject(new Error("The operating system did not allocate a TCP port")));
+      return;
+    }
+    server.close((error) => error ? reject(error) : resolve(address.port));
+  });
+});
+
 const run = async (): Promise<number> => {
   if (databaseTestUrl !== undefined && databaseTestUrl.trim() !== "") {
     if (!isIsolatedDatabaseTestUrl(databaseTestUrl)) {
@@ -22,7 +37,7 @@ const run = async (): Promise<number> => {
   }
 
   const directory = await mkdtemp(join(tmpdir(), "kairo-postgres-"));
-  const port = 55432;
+  const port = await allocateLoopbackPort();
   const embedded = new EmbeddedPostgres({ databaseDir: directory, user: "postgres", password: "postgres", port, persistent: false, onLog: () => undefined, onError: () => undefined });
   const database = "kairo_test";
   const migrator = "kairo_migrator";

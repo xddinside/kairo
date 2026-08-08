@@ -70,6 +70,10 @@ const setIdentity = async (tx: KairoTx, user: AuthenticatedUser): Promise<void> 
   }
 };
 
+const provisionUser = async (tx: KairoTx, user: AuthenticatedUser): Promise<void> => {
+  await tx.insert(schema.users).values({ id: user.id }).onConflictDoNothing({ target: schema.users.id });
+};
+
 export const makeDatabaseService = (url: URL | string, boundary: DatabaseRoleBoundary): DatabaseService => {
   const client = postgres(String(url), { max: 4, prepare: false, connect_timeout: 5 });
   const database = drizzle(client, { schema });
@@ -81,7 +85,12 @@ export const makeDatabaseService = (url: URL | string, boundary: DatabaseRoleBou
 
   return {
     healthcheck: () => run(async (tx) => { await verifyRuntime(tx, boundary); return "ready" as const; }),
-    withTransaction: (user, operation) => retryTransient(run(async (tx) => { await verifyRuntime(tx, boundary); await setIdentity(tx, user); return operation(tx); })),
+    withTransaction: (user, operation) => retryTransient(run(async (tx) => {
+      await verifyRuntime(tx, boundary);
+      await setIdentity(tx, user);
+      await provisionUser(tx, user);
+      return operation(tx);
+    })),
     close: () => Effect.promise(() => client.end({ timeout: 5 }).then(() => undefined)),
   };
 };

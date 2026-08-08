@@ -13,6 +13,38 @@
   }
 }
 
+@layer components {
+  .typeset {
+    --typeset-size: 0.875rem;
+    --typeset-leading: 1.7;
+    --typeset-flow: 1.15em;
+    color: var(--color-kumo-default);
+    font-size: var(--typeset-size);
+    line-height: var(--typeset-leading);
+  }
+
+  .typeset > :where(*) { margin-block: 0; }
+  .typeset > :where(* + *) { margin-block-start: var(--typeset-flow); }
+  .typeset :where(h1, h2, h3, h4, h5, h6) { color: var(--color-kumo-strong); font-weight: 600; line-height: 1.2; text-wrap: balance; }
+  .typeset :where(h1, h2) { font-size: 1.375em; }
+  .typeset :where(h3) { font-size: 1.2em; }
+  .typeset :where(h4, h5, h6) { font-size: 1em; }
+  .typeset :where(ul, ol) { padding-inline-start: 1.5em; }
+  .typeset :where(ul) { list-style: disc; }
+  .typeset :where(ol) { list-style: decimal; }
+  .typeset :where(li + li) { margin-block-start: 0.35em; }
+  .typeset :where(a) { color: var(--color-kumo-brand); font-weight: 500; text-decoration-line: underline; text-decoration-thickness: from-font; text-underline-offset: 0.2em; }
+  .typeset :where(blockquote) { border-inline-start: 2px solid var(--color-kumo-line); color: var(--color-kumo-subtle); padding-inline-start: 1em; }
+  .typeset :where(code) { border-radius: 0.25rem; background: var(--color-kumo-tint); padding: 0.1em 0.3em; font-family: ui-monospace, monospace; font-size: 0.9em; }
+  .typeset :where(pre) { overflow-x: auto; border-radius: 0.5rem; background: var(--color-kumo-tint); padding: 1em; }
+  .typeset :where(pre code) { background: transparent; padding: 0; }
+  .typeset :where(hr) { border: 0; border-block-start: 1px solid var(--color-kumo-line); }
+  .typeset :where(table) { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  .typeset :where(th, td) { border-block-end: 1px solid var(--color-kumo-line); padding: 0.6em 0.75em; text-align: start; vertical-align: top; }
+  .typeset :where(th) { color: var(--color-kumo-strong); font-weight: 600; }
+  .typeset-scroll { max-width: 100%; overflow-x: auto; }
+}
+
 @keyframes lfc-rise {
   from {
     opacity: 0;

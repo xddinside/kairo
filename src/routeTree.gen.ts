@@ -11,18 +11,24 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CanvasRouteImport } from './routes/canvas'
+import { Route as CoursesRouteImport } from './routes/courses'
 import { Route as DeadlinesRouteImport } from './routes/deadlines'
 import { Route as FocusRouteImport } from './routes/focus'
 import { Route as NotesRouteImport } from './routes/notes'
 import { Route as TasksRouteImport } from './routes/tasks'
 import { Route as TimetableRouteImport } from './routes/timetable'
 import { Route as CanvasIndexRouteImport } from './routes/canvas/index'
+import { Route as CanvasCanvasIdRouteImport } from './routes/canvas.$canvasId'
 import { Route as CanvasTodayRouteImport } from './routes/canvas/today'
+import { Route as CoursesCourseIdRouteImport } from './routes/courses.$courseId'
+import { Route as NotesNoteIdRouteImport } from './routes/notes.$noteId'
 import { Route as ProtoIndexRouteImport } from './routes/proto/index'
 import { Route as ProtoCatalogRouteImport } from './routes/proto/catalog'
 import { Route as ProtoFocusRouteImport } from './routes/proto/focus'
 import { Route as ProtoLifecycleRouteImport } from './routes/proto/lifecycle'
 import { Route as SignInSplatRouteImport } from './routes/sign-in.$'
+import { Route as TasksTaskIdRouteImport } from './routes/tasks.$taskId'
+import { Route as TimetableEntryIdRouteImport } from './routes/timetable.$entryId'
 import { Route as ProtoAIndexRouteImport } from './routes/proto/a/index'
 import { Route as ProtoATodayRouteImport } from './routes/proto/a/today'
 import { Route as ProtoBIndexRouteImport } from './routes/proto/b/index'
@@ -38,6 +44,11 @@ const IndexRoute = IndexRouteImport.update({
 const CanvasRoute = CanvasRouteImport.update({
   id: '/canvas',
   path: '/canvas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CoursesRoute = CoursesRouteImport.update({
+  id: '/courses',
+  path: '/courses',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DeadlinesRoute = DeadlinesRouteImport.update({
@@ -70,10 +81,25 @@ const CanvasIndexRoute = CanvasIndexRouteImport.update({
   path: '/',
   getParentRoute: () => CanvasRoute,
 } as any)
+const CanvasCanvasIdRoute = CanvasCanvasIdRouteImport.update({
+  id: '/$canvasId',
+  path: '/$canvasId',
+  getParentRoute: () => CanvasRoute,
+} as any)
 const CanvasTodayRoute = CanvasTodayRouteImport.update({
   id: '/today',
   path: '/today',
   getParentRoute: () => CanvasRoute,
+} as any)
+const CoursesCourseIdRoute = CoursesCourseIdRouteImport.update({
+  id: '/$courseId',
+  path: '/$courseId',
+  getParentRoute: () => CoursesRoute,
+} as any)
+const NotesNoteIdRoute = NotesNoteIdRouteImport.update({
+  id: '/$noteId',
+  path: '/$noteId',
+  getParentRoute: () => NotesRoute,
 } as any)
 const ProtoIndexRoute = ProtoIndexRouteImport.update({
   id: '/proto/',
@@ -99,6 +125,16 @@ const SignInSplatRoute = SignInSplatRouteImport.update({
   id: '/sign-in/$',
   path: '/sign-in/$',
   getParentRoute: () => rootRouteImport,
+} as any)
+const TasksTaskIdRoute = TasksTaskIdRouteImport.update({
+  id: '/$taskId',
+  path: '/$taskId',
+  getParentRoute: () => TasksRoute,
+} as any)
+const TimetableEntryIdRoute = TimetableEntryIdRouteImport.update({
+  id: '/$entryId',
+  path: '/$entryId',
+  getParentRoute: () => TimetableRoute,
 } as any)
 const ProtoAIndexRoute = ProtoAIndexRouteImport.update({
   id: '/proto/a/',
@@ -134,16 +170,22 @@ const ProtoCTodayRoute = ProtoCTodayRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/canvas': typeof CanvasRouteWithChildren
+  '/courses': typeof CoursesRouteWithChildren
   '/deadlines': typeof DeadlinesRoute
   '/focus': typeof FocusRoute
-  '/notes': typeof NotesRoute
-  '/tasks': typeof TasksRoute
-  '/timetable': typeof TimetableRoute
+  '/notes': typeof NotesRouteWithChildren
+  '/tasks': typeof TasksRouteWithChildren
+  '/timetable': typeof TimetableRouteWithChildren
+  '/canvas/$canvasId': typeof CanvasCanvasIdRoute
   '/canvas/today': typeof CanvasTodayRoute
+  '/courses/$courseId': typeof CoursesCourseIdRoute
+  '/notes/$noteId': typeof NotesNoteIdRoute
   '/proto/catalog': typeof ProtoCatalogRoute
   '/proto/focus': typeof ProtoFocusRoute
   '/proto/lifecycle': typeof ProtoLifecycleRoute
   '/sign-in/$': typeof SignInSplatRoute
+  '/tasks/$taskId': typeof TasksTaskIdRoute
+  '/timetable/$entryId': typeof TimetableEntryIdRoute
   '/canvas/': typeof CanvasIndexRoute
   '/proto/': typeof ProtoIndexRoute
   '/proto/a/today': typeof ProtoATodayRoute
@@ -155,16 +197,22 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/courses': typeof CoursesRouteWithChildren
   '/deadlines': typeof DeadlinesRoute
   '/focus': typeof FocusRoute
-  '/notes': typeof NotesRoute
-  '/tasks': typeof TasksRoute
-  '/timetable': typeof TimetableRoute
+  '/notes': typeof NotesRouteWithChildren
+  '/tasks': typeof TasksRouteWithChildren
+  '/timetable': typeof TimetableRouteWithChildren
+  '/canvas/$canvasId': typeof CanvasCanvasIdRoute
   '/canvas/today': typeof CanvasTodayRoute
+  '/courses/$courseId': typeof CoursesCourseIdRoute
+  '/notes/$noteId': typeof NotesNoteIdRoute
   '/proto/catalog': typeof ProtoCatalogRoute
   '/proto/focus': typeof ProtoFocusRoute
   '/proto/lifecycle': typeof ProtoLifecycleRoute
   '/sign-in/$': typeof SignInSplatRoute
+  '/tasks/$taskId': typeof TasksTaskIdRoute
+  '/timetable/$entryId': typeof TimetableEntryIdRoute
   '/canvas': typeof CanvasIndexRoute
   '/proto': typeof ProtoIndexRoute
   '/proto/a/today': typeof ProtoATodayRoute
@@ -178,16 +226,22 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/canvas': typeof CanvasRouteWithChildren
+  '/courses': typeof CoursesRouteWithChildren
   '/deadlines': typeof DeadlinesRoute
   '/focus': typeof FocusRoute
-  '/notes': typeof NotesRoute
-  '/tasks': typeof TasksRoute
-  '/timetable': typeof TimetableRoute
+  '/notes': typeof NotesRouteWithChildren
+  '/tasks': typeof TasksRouteWithChildren
+  '/timetable': typeof TimetableRouteWithChildren
+  '/canvas/$canvasId': typeof CanvasCanvasIdRoute
   '/canvas/today': typeof CanvasTodayRoute
+  '/courses/$courseId': typeof CoursesCourseIdRoute
+  '/notes/$noteId': typeof NotesNoteIdRoute
   '/proto/catalog': typeof ProtoCatalogRoute
   '/proto/focus': typeof ProtoFocusRoute
   '/proto/lifecycle': typeof ProtoLifecycleRoute
   '/sign-in/$': typeof SignInSplatRoute
+  '/tasks/$taskId': typeof TasksTaskIdRoute
+  '/timetable/$entryId': typeof TimetableEntryIdRoute
   '/canvas/': typeof CanvasIndexRoute
   '/proto/': typeof ProtoIndexRoute
   '/proto/a/today': typeof ProtoATodayRoute
@@ -202,16 +256,22 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/canvas'
+    | '/courses'
     | '/deadlines'
     | '/focus'
     | '/notes'
     | '/tasks'
     | '/timetable'
+    | '/canvas/$canvasId'
     | '/canvas/today'
+    | '/courses/$courseId'
+    | '/notes/$noteId'
     | '/proto/catalog'
     | '/proto/focus'
     | '/proto/lifecycle'
     | '/sign-in/$'
+    | '/tasks/$taskId'
+    | '/timetable/$entryId'
     | '/canvas/'
     | '/proto/'
     | '/proto/a/today'
@@ -223,16 +283,22 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/courses'
     | '/deadlines'
     | '/focus'
     | '/notes'
     | '/tasks'
     | '/timetable'
+    | '/canvas/$canvasId'
     | '/canvas/today'
+    | '/courses/$courseId'
+    | '/notes/$noteId'
     | '/proto/catalog'
     | '/proto/focus'
     | '/proto/lifecycle'
     | '/sign-in/$'
+    | '/tasks/$taskId'
+    | '/timetable/$entryId'
     | '/canvas'
     | '/proto'
     | '/proto/a/today'
@@ -245,16 +311,22 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/canvas'
+    | '/courses'
     | '/deadlines'
     | '/focus'
     | '/notes'
     | '/tasks'
     | '/timetable'
+    | '/canvas/$canvasId'
     | '/canvas/today'
+    | '/courses/$courseId'
+    | '/notes/$noteId'
     | '/proto/catalog'
     | '/proto/focus'
     | '/proto/lifecycle'
     | '/sign-in/$'
+    | '/tasks/$taskId'
+    | '/timetable/$entryId'
     | '/canvas/'
     | '/proto/'
     | '/proto/a/today'
@@ -268,11 +340,12 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CanvasRoute: typeof CanvasRouteWithChildren
+  CoursesRoute: typeof CoursesRouteWithChildren
   DeadlinesRoute: typeof DeadlinesRoute
   FocusRoute: typeof FocusRoute
-  NotesRoute: typeof NotesRoute
-  TasksRoute: typeof TasksRoute
-  TimetableRoute: typeof TimetableRoute
+  NotesRoute: typeof NotesRouteWithChildren
+  TasksRoute: typeof TasksRouteWithChildren
+  TimetableRoute: typeof TimetableRouteWithChildren
   ProtoCatalogRoute: typeof ProtoCatalogRoute
   ProtoFocusRoute: typeof ProtoFocusRoute
   ProtoLifecycleRoute: typeof ProtoLifecycleRoute
@@ -300,6 +373,13 @@ declare module '@tanstack/react-router' {
       path: '/canvas'
       fullPath: '/canvas'
       preLoaderRoute: typeof CanvasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/courses': {
+      id: '/courses'
+      path: '/courses'
+      fullPath: '/courses'
+      preLoaderRoute: typeof CoursesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/deadlines': {
@@ -344,12 +424,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CanvasIndexRouteImport
       parentRoute: typeof CanvasRoute
     }
+    '/canvas/$canvasId': {
+      id: '/canvas/$canvasId'
+      path: '/$canvasId'
+      fullPath: '/canvas/$canvasId'
+      preLoaderRoute: typeof CanvasCanvasIdRouteImport
+      parentRoute: typeof CanvasRoute
+    }
     '/canvas/today': {
       id: '/canvas/today'
       path: '/today'
       fullPath: '/canvas/today'
       preLoaderRoute: typeof CanvasTodayRouteImport
       parentRoute: typeof CanvasRoute
+    }
+    '/courses/$courseId': {
+      id: '/courses/$courseId'
+      path: '/$courseId'
+      fullPath: '/courses/$courseId'
+      preLoaderRoute: typeof CoursesCourseIdRouteImport
+      parentRoute: typeof CoursesRoute
+    }
+    '/notes/$noteId': {
+      id: '/notes/$noteId'
+      path: '/$noteId'
+      fullPath: '/notes/$noteId'
+      preLoaderRoute: typeof NotesNoteIdRouteImport
+      parentRoute: typeof NotesRoute
     }
     '/proto/': {
       id: '/proto/'
@@ -385,6 +486,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/sign-in/$'
       preLoaderRoute: typeof SignInSplatRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/tasks/$taskId': {
+      id: '/tasks/$taskId'
+      path: '/$taskId'
+      fullPath: '/tasks/$taskId'
+      preLoaderRoute: typeof TasksTaskIdRouteImport
+      parentRoute: typeof TasksRoute
+    }
+    '/timetable/$entryId': {
+      id: '/timetable/$entryId'
+      path: '/$entryId'
+      fullPath: '/timetable/$entryId'
+      preLoaderRoute: typeof TimetableEntryIdRouteImport
+      parentRoute: typeof TimetableRoute
     }
     '/proto/a/': {
       id: '/proto/a/'
@@ -432,11 +547,13 @@ declare module '@tanstack/react-router' {
 }
 
 interface CanvasRouteChildren {
+  CanvasCanvasIdRoute: typeof CanvasCanvasIdRoute
   CanvasTodayRoute: typeof CanvasTodayRoute
   CanvasIndexRoute: typeof CanvasIndexRoute
 }
 
 const CanvasRouteChildren: CanvasRouteChildren = {
+  CanvasCanvasIdRoute: CanvasCanvasIdRoute,
   CanvasTodayRoute: CanvasTodayRoute,
   CanvasIndexRoute: CanvasIndexRoute,
 }
@@ -444,14 +561,58 @@ const CanvasRouteChildren: CanvasRouteChildren = {
 const CanvasRouteWithChildren =
   CanvasRoute._addFileChildren(CanvasRouteChildren)
 
+interface CoursesRouteChildren {
+  CoursesCourseIdRoute: typeof CoursesCourseIdRoute
+}
+
+const CoursesRouteChildren: CoursesRouteChildren = {
+  CoursesCourseIdRoute: CoursesCourseIdRoute,
+}
+
+const CoursesRouteWithChildren =
+  CoursesRoute._addFileChildren(CoursesRouteChildren)
+
+interface NotesRouteChildren {
+  NotesNoteIdRoute: typeof NotesNoteIdRoute
+}
+
+const NotesRouteChildren: NotesRouteChildren = {
+  NotesNoteIdRoute: NotesNoteIdRoute,
+}
+
+const NotesRouteWithChildren = NotesRoute._addFileChildren(NotesRouteChildren)
+
+interface TasksRouteChildren {
+  TasksTaskIdRoute: typeof TasksTaskIdRoute
+}
+
+const TasksRouteChildren: TasksRouteChildren = {
+  TasksTaskIdRoute: TasksTaskIdRoute,
+}
+
+const TasksRouteWithChildren = TasksRoute._addFileChildren(TasksRouteChildren)
+
+interface TimetableRouteChildren {
+  TimetableEntryIdRoute: typeof TimetableEntryIdRoute
+}
+
+const TimetableRouteChildren: TimetableRouteChildren = {
+  TimetableEntryIdRoute: TimetableEntryIdRoute,
+}
+
+const TimetableRouteWithChildren = TimetableRoute._addFileChildren(
+  TimetableRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CanvasRoute: CanvasRouteWithChildren,
+  CoursesRoute: CoursesRouteWithChildren,
   DeadlinesRoute: DeadlinesRoute,
   FocusRoute: FocusRoute,
-  NotesRoute: NotesRoute,
-  TasksRoute: TasksRoute,
-  TimetableRoute: TimetableRoute,
+  NotesRoute: NotesRouteWithChildren,
+  TasksRoute: TasksRouteWithChildren,
+  TimetableRoute: TimetableRouteWithChildren,
   ProtoCatalogRoute: ProtoCatalogRoute,
   ProtoFocusRoute: ProtoFocusRoute,
   ProtoLifecycleRoute: ProtoLifecycleRoute,

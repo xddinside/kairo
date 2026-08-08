@@ -66,6 +66,31 @@ run("production PostgreSQL migration and RLS proof", () => {
     await Effect.runPromise(service.close());
   });
 
+  it("provisions a newly authenticated User before their first database operation", async () => {
+    const service = makeDatabaseService(url!, { runtimeRole: "kairo_runtime", migrationRole: "kairo_migrator" });
+    const newcomer = requireUserFromSession({
+      _tag: "verified",
+      userId: "user_newcomer",
+      sessionId: "sess_newcomer",
+    });
+
+    const provisioned = await Effect.runPromise(service.withTransaction(newcomer, async (tx) => {
+      const users = await tx.execute<{ id: string; time_zone: string }>(sql`
+        select id, time_zone from users where id = ${newcomer.id}
+      `);
+      const courses = await tx.execute<{ id: string }>(sql`
+        insert into courses (owner_id, title)
+        values (${newcomer.id}, 'First course')
+        returning id
+      `);
+      return { user: users[0], course: courses[0] };
+    }));
+
+    expect(provisioned.user).toEqual({ id: "user_newcomer", time_zone: "UTC" });
+    expect(provisioned.course?.id).toBeDefined();
+    await Effect.runPromise(service.close());
+  });
+
   it("rejects missing, equal, wrong, owner, and superuser runtime boundaries", async () => {
     const boundaries = [
       { runtimeRole: "", migrationRole: "kairo_migrator" },

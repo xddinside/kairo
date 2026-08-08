@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { QuietA } from "../../components/proto/variant-a";
+import { CanvasHome } from "../../components/canvas/canvas-home";
 
 export const Route = createFileRoute("/canvas/")({
   head: () => ({
@@ -10,5 +10,5 @@ export const Route = createFileRoute("/canvas/")({
 });
 
 function CanvasRoute() {
-  return <QuietA todayRoute="/canvas/today" />;
+  return <CanvasHome />;
 }

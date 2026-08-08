@@ -1,16 +1,21 @@
 import { Sidebar } from "@cloudflare/kumo/components/sidebar";
-import { Outlet, createFileRoute } from "@tanstack/react-router";
+import { Outlet, createFileRoute, useRouterState } from "@tanstack/react-router";
 import type { CSSProperties } from "react";
 
-import { AppSidebar } from "../components/app-sidebar";
+import { CanvasNavigation } from "../components/canvas/canvas-navigation";
 import { requireAuthenticatedRoute } from "../server/auth/functions";
+import { recentCanvases } from "../server/canvas/functions";
 
 export const Route = createFileRoute("/canvas")({
   beforeLoad: requireAuthenticatedRoute,
+  loader: () => recentCanvases({ data: { limit: 20 } }),
   component: CanvasShell,
 });
 
 function CanvasShell() {
+  const recent = Route.useLoaderData();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const canvasId = pathname.match(/^\/canvas\/([^/]+)$/)?.[1];
   return (
     <Sidebar.Provider
       animationDuration={0}
@@ -22,8 +27,8 @@ function CanvasShell() {
         } as CSSProperties
       }
     >
-      <AppSidebar />
-      <div className="min-w-0 flex-1">
+      <CanvasNavigation currentCanvasId={canvasId} recent={recent} />
+      <div className="min-w-0 flex-1 md:contents">
         <Outlet />
       </div>
     </Sidebar.Provider>
