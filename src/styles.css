@@ -226,6 +226,19 @@ html {
     overflow-anchor: none;
   }
 
+  .landing-page,
+  .landing-page *,
+  .landing-page *::before,
+  .landing-page *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .landing-page .reveal {
+    opacity: 1;
+    transform: none;
+  }
+
   .eyebrow {
     font-size: 0.72rem;
     font-weight: 600;
