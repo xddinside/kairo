@@ -1,8 +1,14 @@
 import { HeadContent, Outlet, Scripts, createRootRoute, useRouterState } from "@tanstack/react-router";
 import { ClerkProvider } from "@clerk/tanstack-react-start";
+import { lazy, Suspense } from "react";
 
-import { WorkspaceShell } from "../components/workspace-shell";
 import appCss from "../styles.css?url";
+
+const WorkspaceShell = lazy(() =>
+  import("../components/workspace-shell").then(({ WorkspaceShell }) => ({
+    default: WorkspaceShell,
+  })),
+);
 
 export const Route = createRootRoute({
   head: () => ({
@@ -62,7 +68,9 @@ function RootRoute() {
   const content = <Outlet />;
 
   return workspacePath.test(pathname) ? (
-    <WorkspaceShell>{content}</WorkspaceShell>
+    <Suspense fallback={content}>
+      <WorkspaceShell>{content}</WorkspaceShell>
+    </Suspense>
   ) : content;
 }
 
