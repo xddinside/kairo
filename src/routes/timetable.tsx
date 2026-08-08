@@ -1,17 +1,37 @@
 import { Badge } from "@cloudflare/kumo/components/badge";
 import { Button } from "@cloudflare/kumo/components/button";
 import { Dialog } from "@cloudflare/kumo/components/dialog";
+import { Empty } from "@cloudflare/kumo/components/empty";
 import { LayerCard } from "@cloudflare/kumo/components/layer-card";
-import { CalendarDots, CaretLeft, CaretRight, Plus, WarningCircle, X } from "@phosphor-icons/react";
+import { Text } from "@cloudflare/kumo/components/text";
+import { CalendarDots, CalendarPlus, CaretLeft, CaretRight, Plus, Repeat, X } from "@phosphor-icons/react";
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { startTransition, useState } from "react";
 import { z } from "zod";
 
+import {
+  datesBetween,
+  formatDayLabel,
+  formatDayNumber,
+  formatDuration,
+  formatRangeLabel,
+  formatTime,
+  formatWeekdayShort,
+  localDate,
+  shiftDate,
+} from "../components/timetable/timetable-dates";
+import { TimetableError, TimetableLoading, TimetableToast } from "../components/timetable/timetable-feedback";
 import { TimetableForm, type TimetableFormValues } from "../components/timetable/timetable-form";
 import { TimetableShell } from "../components/timetable/timetable-shell";
+import { useLocalClock } from "../components/timetable/use-local-clock";
 import { requireAuthenticatedRoute } from "../server/auth/functions";
+import type {
+  TimetableCommandResult,
+  TimetableEntry,
+  TimetableFieldError,
+  TimetableOccurrence,
+} from "../server/timetable/domain";
 import { createTimetableEntry, listTimetable, undoTimetableCommand } from "../server/timetable/functions";
-import { nextDate, type TimetableCommandResult, type TimetableFieldError } from "../server/timetable/domain";
 
 const isoDate = /^\d{4}-\d{2}-\d{2}$/;
 const searchSchema = z.object({
@@ -19,28 +39,20 @@ const searchSchema = z.object({
   to: z.string().regex(isoDate).optional().catch(undefined),
   q: z.string().max(100).optional().catch(undefined),
   courseId: z.string().uuid().optional().catch(undefined),
-  pageSize: z.coerce.number().pipe(z.union([z.literal(10), z.literal(25), z.literal(50), z.literal(100)])).optional().catch(25),
+  pageSize: z.coerce
+    .number()
+    .pipe(z.union([z.literal(10), z.literal(25), z.literal(50), z.literal(100)]))
+    .optional()
+    .catch(25),
 });
 
-const localDate = (date: Date): string => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
+/** One rendered session: the owning entry plus the occurrence being shown. */
+interface AgendaItem {
+  readonly entry: TimetableEntry;
+  readonly occurrence: TimetableOccurrence;
+}
 
-const plusDays = (date: string, days: number): string => {
-  let value = date;
-  for (let index = 0; index < Math.abs(days); index += 1) {
-    if (days > 0) value = nextDate(value);
-    else {
-      const parsed = new Date(`${value}T12:00:00Z`);
-      parsed.setUTCDate(parsed.getUTCDate() - 1);
-      value = parsed.toISOString().slice(0, 10);
-    }
-  }
-  return value;
-};
+const agendaKey = (item: AgendaItem): string => `${item.entry.id}-${item.occurrence.date}`;
 
 export const Route = createFileRoute("/timetable")({
   beforeLoad: requireAuthenticatedRoute,
@@ -48,11 +60,19 @@ export const Route = createFileRoute("/timetable")({
   loaderDeps: ({ search }) => search,
   loader: ({ deps }) => {
     const from = deps.from ?? localDate(new Date());
-    const to = deps.to && deps.to >= from ? deps.to : plusDays(from, 6);
-    return listTimetable({ data: { from, to, q: deps.q?.trim() ?? "", courseId: deps.courseId ?? null, pageSize: deps.pageSize ?? 25 } });
+    const to = deps.to && deps.to >= from ? deps.to : shiftDate(from, 6);
+    return listTimetable({
+      data: {
+        from,
+        to,
+        q: deps.q?.trim() ?? "",
+        courseId: deps.courseId ?? null,
+        pageSize: deps.pageSize ?? 25,
+      },
+    });
   },
-  pendingComponent: TimetableLoading,
-  errorComponent: TimetableError,
+  pendingComponent: () => <TimetableLoading title="Timetable" />,
+  errorComponent: ({ reset }) => <TimetableError title="Timetable unavailable" reset={reset} />,
   component: TimetableRoute,
 });
 
@@ -61,81 +81,423 @@ function TimetableRoute() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const router = useRouter();
+  const clock = useLocalClock();
   const [createOpen, setCreateOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [errors, setErrors] = useState<ReadonlyArray<TimetableFieldError>>([]);
   const [notice, setNotice] = useState<{ readonly message: string; readonly token?: string }>();
-  const from = search.from ?? localDate(new Date());
-  const to = search.to && search.to >= from ? search.to : plusDays(from, 6);
-  const grouped = new Map<string, Array<{ entry: (typeof data.items)[number]; occurrence: (typeof data.items)[number]["occurrences"][number] }>>();
-  for (const entry of data.items) for (const occurrence of entry.occurrences) grouped.set(occurrence.date, [...(grouped.get(occurrence.date) ?? []), { entry, occurrence }]);
 
-  const moveRange = (days: number) => navigate({ search: (previous) => ({ ...previous, from: plusDays(from, days), to: plusDays(to, days) }) });
+  const from = search.from ?? localDate(new Date());
+  const to = search.to && search.to >= from ? search.to : shiftDate(from, 6);
+
+  const byDate = new Map<string, Array<AgendaItem>>();
+  for (const entry of data.items) {
+    for (const occurrence of entry.occurrences) {
+      const bucket = byDate.get(occurrence.date);
+      if (bucket) bucket.push({ entry, occurrence });
+      else byDate.set(occurrence.date, [{ entry, occurrence }]);
+    }
+  }
+  for (const bucket of byDate.values()) {
+    bucket.sort(
+      (left, right) =>
+        left.occurrence.startTime.localeCompare(right.occurrence.startTime) ||
+        left.entry.title.localeCompare(right.entry.title),
+    );
+  }
+
+  const week = datesBetween(from, to).map((date) => ({ date, items: byDate.get(date) ?? [] }));
+  const days = week.filter((day) => day.items.length > 0);
+  const sessionCount = days.reduce((total, day) => total + day.items.length, 0);
+  const upcoming = clock
+    ? days.flatMap((day) => day.items).find((item) => item.occurrence.startInstant > clock.instant)
+    : undefined;
+  const nextKey = upcoming ? agendaKey(upcoming) : undefined;
+  const showsToday = Boolean(clock && clock.today >= from && clock.today <= to);
+
+  const moveRange = (offset: number) =>
+    void navigate({
+      search: (previous) => ({ ...previous, from: shiftDate(from, offset), to: shiftDate(to, offset) }),
+    });
+  const goToday = () => {
+    const start = localDate(new Date());
+    void navigate({ search: (previous) => ({ ...previous, from: start, to: shiftDate(start, 6) }) });
+  };
+
   const submitCreate = async (values: TimetableFormValues) => {
     setPending(true);
     setErrors([]);
     try {
       const result = await createTimetableEntry({ data: { ...values, idempotencyKey: crypto.randomUUID() } });
-      if (result._tag === "invalid") { setErrors(result.fields); return; }
-      if (result._tag !== "applied" && result._tag !== "already_applied") { setErrors([{ field: "form", message: result._tag === "conflict" ? "The entry changed. Reload and try again." : "The entry could not be saved." }]); return; }
+      if (result._tag === "invalid") {
+        setErrors(result.fields);
+        return;
+      }
+      if (result._tag !== "applied" && result._tag !== "already_applied") {
+        setErrors([
+          {
+            field: "form",
+            message:
+              result._tag === "conflict"
+                ? "The entry changed. Reload and try again."
+                : "The entry could not be saved.",
+          },
+        ]);
+        return;
+      }
       setCreateOpen(false);
-      setNotice({ message: result.overlapWarnings.length > 0 ? `Entry created with ${result.overlapWarnings.length} overlap warning${result.overlapWarnings.length === 1 ? "" : "s"}.` : "Entry created.", token: result.undoToken });
+      setNotice({
+        message:
+          result.overlapWarnings.length > 0
+            ? `Entry created with ${result.overlapWarnings.length} overlap warning${result.overlapWarnings.length === 1 ? "" : "s"}.`
+            : "Entry created.",
+        ...(result.undoToken ? { token: result.undoToken } : {}),
+      });
       startTransition(() => void router.invalidate());
-    } finally { setPending(false); }
+    } finally {
+      setPending(false);
+    }
   };
+
   const undo = async () => {
     if (!notice?.token) return;
-    const result: TimetableCommandResult = await undoTimetableCommand({ data: { token: notice.token, idempotencyKey: crypto.randomUUID() } });
-    setNotice({ message: result._tag === "applied" ? "Change undone." : "This change can no longer be undone." });
+    const result: TimetableCommandResult = await undoTimetableCommand({
+      data: { token: notice.token, idempotencyKey: crypto.randomUUID() },
+    });
+    setNotice({
+      message: result._tag === "applied" ? "Change undone." : "This change can no longer be undone.",
+    });
     if (result._tag === "applied") startTransition(() => void router.invalidate());
   };
 
   return (
     <TimetableShell>
-      <main className="mx-auto w-full max-w-5xl px-4 py-6 pb-24 sm:px-6 md:py-8 lg:px-10">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div><h1 className="text-2xl font-semibold text-kumo-strong">Timetable</h1><p className="mt-1 text-sm text-kumo-subtle">{formatRange(from, to)} · {data.timeZone}</p></div>
+      <main className="mx-auto w-full max-w-5xl px-4 py-8 pb-24 sm:px-6 md:py-12 lg:px-10">
+        <header className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-3.5">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-kumo-base text-kumo-brand shadow-sm ring ring-kumo-line">
+              <CalendarDots aria-hidden="true" size={21} />
+            </span>
+            <div className="min-w-0">
+              <Text as="h1" variant="heading1">
+                Timetable
+              </Text>
+              <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-kumo-subtle">
+                <span className="tabular-nums">
+                  {sessionCount} {sessionCount === 1 ? "session" : "sessions"}
+                </span>
+                <span aria-hidden="true" className="h-3 w-px bg-kumo-line" />
+                <span className="truncate">{data.timeZone}</span>
+              </p>
+            </div>
+          </div>
           <Dialog.Root open={createOpen} onOpenChange={setCreateOpen}>
-            <Dialog.Trigger render={(props) => <Button {...props} icon={<Plus aria-hidden="true" size={16} weight="bold" />} className="active:scale-[0.96] transition-transform">Create entry</Button>} />
+            <Dialog.Trigger
+              render={(props) => (
+                <Button
+                  {...props}
+                  variant="primary"
+                  icon={<Plus aria-hidden="true" size={16} weight="bold" />}
+                  className="min-h-10 shrink-0 rounded-lg shadow-sm transition-transform duration-150 ease-out active:scale-[0.96]"
+                >
+                  Create entry
+                </Button>
+              )}
+            />
             <Dialog className="max-h-[calc(100svh-2rem)] overflow-y-auto p-5 sm:max-w-2xl sm:p-6">
-              <div className="mb-5 flex items-center justify-between gap-4"><Dialog.Title className="text-xl font-semibold">Create entry</Dialog.Title><Dialog.Close aria-label="Close create entry" render={(props) => <Button {...props} title="Close create entry" variant="secondary" shape="square" icon={<X aria-hidden="true" size={18} />} />} /></div>
-              <TimetableForm initialDate={from} errors={errors} pending={pending} onCancel={() => setCreateOpen(false)} onSubmit={submitCreate} />
+              <div className="mb-5 flex items-center justify-between gap-4">
+                <Dialog.Title className="text-xl font-semibold">Create entry</Dialog.Title>
+                <Dialog.Close
+                  aria-label="Close create entry"
+                  render={(props) => (
+                    <Button
+                      {...props}
+                      title="Close create entry"
+                      variant="secondary"
+                      shape="square"
+                      className="min-h-10 min-w-10"
+                      icon={<X aria-hidden="true" size={18} />}
+                    />
+                  )}
+                />
+              </div>
+              <TimetableForm
+                initialDate={from}
+                errors={errors}
+                pending={pending}
+                onCancel={() => setCreateOpen(false)}
+                onSubmit={submitCreate}
+              />
             </Dialog>
           </Dialog.Root>
-        </div>
+        </header>
 
-        <div className="mt-6 flex items-center justify-between gap-3 border-y border-kumo-line py-3">
-          <Button variant="secondary" shape="square" aria-label="Previous seven days" icon={<CaretLeft aria-hidden="true" size={17} />} onClick={() => void moveRange(-7)} />
-          <Button variant="secondary" onClick={() => void navigate({ search: { from: localDate(new Date()), to: plusDays(localDate(new Date()), 6), pageSize: search.pageSize } })}>Today</Button>
-          <Button variant="secondary" shape="square" aria-label="Next seven days" icon={<CaretRight aria-hidden="true" size={17} />} onClick={() => void moveRange(7)} />
-        </div>
+        <nav aria-label="Timetable range" className="mt-8">
+          <LayerCard>
+            <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-3">
+              <div className="flex items-center gap-1 rounded-xl bg-kumo-tint p-1 ring ring-kumo-line">
+                <Button
+                  variant="ghost"
+                  shape="square"
+                  aria-label="Previous seven days"
+                  icon={<CaretLeft aria-hidden="true" size={16} weight="bold" />}
+                  onClick={() => moveRange(-7)}
+                  className="size-9 rounded-lg transition-transform duration-150 ease-out hover:bg-kumo-base active:scale-[0.96]"
+                />
+                <Button
+                  variant="ghost"
+                  onClick={goToday}
+                  className="h-9 rounded-lg px-3 font-medium transition-transform duration-150 ease-out hover:bg-kumo-base active:scale-[0.96]"
+                >
+                  Today
+                </Button>
+                <Button
+                  variant="ghost"
+                  shape="square"
+                  aria-label="Next seven days"
+                  icon={<CaretRight aria-hidden="true" size={16} weight="bold" />}
+                  onClick={() => moveRange(7)}
+                  className="size-9 rounded-lg transition-transform duration-150 ease-out hover:bg-kumo-base active:scale-[0.96]"
+                />
+              </div>
+              <p className="pe-1 text-base font-medium text-kumo-strong tabular-nums">{formatRangeLabel(from, to)}</p>
+            </div>
 
-        {grouped.size === 0 ? (
-          <LayerCard className="mt-6 px-6 py-10 text-center"><CalendarDots aria-hidden="true" size={28} className="mx-auto text-kumo-subtle" /><h2 className="mt-3 text-lg font-semibold">No entries this week</h2><Button className="mt-5 active:scale-[0.96] transition-transform" onClick={() => setCreateOpen(true)}>Create entry</Button></LayerCard>
+            <ol className="grid grid-cols-7 gap-1 border-t border-kumo-line p-1">
+              {week.map((day) => (
+                <li key={day.date}>
+                  <DayChip date={day.date} count={day.items.length} today={clock?.today === day.date} />
+                </li>
+              ))}
+            </ol>
+          </LayerCard>
+        </nav>
+
+        {days.length === 0 ? (
+          <LayerCard className="mt-8">
+            <Empty
+              size="base"
+              icon={
+                <span className="flex size-12 items-center justify-center rounded-xl bg-kumo-brand text-kumo-inverse shadow-sm">
+                  <CalendarPlus aria-hidden="true" size={23} />
+                </span>
+              }
+              title="Nothing scheduled in this range"
+              contents={
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <Button
+                    variant="primary"
+                    icon={<Plus aria-hidden="true" size={16} weight="bold" />}
+                    onClick={() => setCreateOpen(true)}
+                    className="shadow-sm transition-transform duration-150 ease-out active:scale-[0.96]"
+                  >
+                    Create entry
+                  </Button>
+                  {showsToday ? null : (
+                    <Button
+                      variant="secondary"
+                      onClick={goToday}
+                      className="transition-transform duration-150 ease-out active:scale-[0.96]"
+                    >
+                      Go to today
+                    </Button>
+                  )}
+                </div>
+              }
+            />
+          </LayerCard>
         ) : (
-          <div className="mt-6 grid gap-7">
-            {[...grouped].map(([date, rows]) => (
-              <section key={date} aria-labelledby={`date-${date}`}>
-                <div className="mb-3 flex items-baseline justify-between gap-3"><h2 id={`date-${date}`} className="text-base font-semibold">{formatDay(date)}</h2><span className="text-xs text-kumo-subtle tabular-nums">{rows.length} {rows.length === 1 ? "entry" : "entries"}</span></div>
-                <LayerCard><ol className="divide-y divide-kumo-line">{rows.sort((left, right) => left.occurrence.startTime.localeCompare(right.occurrence.startTime)).map(({ entry, occurrence }) => (
-                  <li key={`${entry.id}-${date}`} className="grid gap-3 px-4 py-4 sm:grid-cols-[7rem_minmax(0,1fr)_auto] sm:items-center sm:px-5">
-                    <p className="text-sm font-medium tabular-nums"><time dateTime={occurrence.startInstant}>{formatTime(occurrence.startTime)}</time><span className="mx-1 text-kumo-subtle">-</span><time dateTime={occurrence.endInstant}>{formatTime(occurrence.endTime)}</time></p>
-                    <div className="min-w-0"><Link to="/timetable/$entryId" params={{ entryId: entry.id }} search={{ from, to }} className="text-sm font-medium text-kumo-strong underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kumo-focus">{entry.title}</Link><div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-kumo-subtle">{entry.courseTitle ? <span>{entry.courseTitle}</span> : null}<Badge variant="secondary">{entry.kind === "weekly" ? "Weekly" : "One-off"}</Badge></div></div>
-                    <Link to="/timetable/$entryId" params={{ entryId: entry.id }} search={{ from, to }} className="flex min-h-11 items-center justify-center rounded-lg px-3 text-sm font-medium text-kumo-brand ring ring-kumo-line hover:bg-kumo-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kumo-focus">View</Link>
-                  </li>
-                ))}</ol></LayerCard>
+          <div className="mt-8 grid gap-8">
+            {days.map((day, index) => (
+              <section
+                key={day.date}
+                id={`day-${day.date}`}
+                aria-labelledby={`day-heading-${day.date}`}
+                tabIndex={-1}
+                className="lfc-rise scroll-mt-6 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-kumo-focus"
+                style={{ animationDelay: `${Math.min(index, 4) * 45}ms` }}
+              >
+                <div className="mb-2.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 px-0.5">
+                  <div className="flex items-center gap-2">
+                    <Text as="h2" variant="heading3" id={`day-heading-${day.date}`}>
+                      {formatDayLabel(day.date)}
+                    </Text>
+                    {clock?.today === day.date ? <Badge variant="info">Today</Badge> : null}
+                  </div>
+                  <span className="text-xs text-kumo-subtle tabular-nums">
+                    {day.items.length} {day.items.length === 1 ? "session" : "sessions"}
+                  </span>
+                </div>
+
+                <LayerCard>
+                  <ol className="divide-y divide-kumo-line">
+                    {day.items.map((item) => (
+                      <li key={agendaKey(item)}>
+                        <AgendaRow
+                          item={item}
+                          range={{ from, to }}
+                          next={agendaKey(item) === nextKey}
+                          past={Boolean(clock && item.occurrence.endInstant <= clock.instant)}
+                        />
+                      </li>
+                    ))}
+                  </ol>
+                </LayerCard>
               </section>
             ))}
           </div>
         )}
       </main>
-      {notice ? <div role="status" className="fixed right-4 bottom-4 z-50 flex max-w-sm items-center gap-3 rounded-lg bg-kumo-strong px-4 py-3 text-sm text-kumo-inverse shadow-lg"><span>{notice.message}</span>{notice.token ? <button type="button" onClick={() => void undo()} className="min-h-11 font-medium underline underline-offset-4">Undo</button> : null}</div> : null}
+
+      {notice ? (
+        <TimetableToast
+          message={notice.message}
+          {...(notice.token ? { undoToken: notice.token } : {})}
+          pending={pending}
+          onUndo={() => void undo()}
+          onDismiss={() => setNotice(undefined)}
+        />
+      ) : null}
     </TimetableShell>
   );
 }
 
-function TimetableLoading() { return <TimetableShell><main className="mx-auto max-w-5xl px-4 py-8"><h1 className="text-2xl font-semibold">Timetable</h1><div aria-label="Loading timetable" className="mt-8 grid gap-4">{[0, 1, 2].map((value) => <div key={value} className="h-24 animate-pulse rounded-lg bg-kumo-tint motion-reduce:animate-none" />)}</div></main></TimetableShell>; }
-function TimetableError({ reset }: { readonly reset: () => void }) { return <TimetableShell><main className="mx-auto max-w-3xl px-4 py-12"><WarningCircle aria-hidden="true" size={28} className="text-kumo-danger" /><h1 className="mt-3 text-2xl font-semibold">Timetable unavailable</h1><Button className="mt-5" onClick={reset}>Retry</Button></main></TimetableShell>; }
-function formatDay(value: string) { return new Intl.DateTimeFormat("en", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" }).format(new Date(`${value}T12:00:00Z`)); }
-function formatRange(from: string, to: string) { return `${new Intl.DateTimeFormat("en", { month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(`${from}T12:00:00Z`))} - ${new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(`${to}T12:00:00Z`))}`; }
-function formatTime(value: string) { const [hour = 0, minute = 0] = value.split(":").map(Number); return new Intl.DateTimeFormat("en", { hour: "numeric", minute: "2-digit", timeZone: "UTC" }).format(new Date(Date.UTC(2000, 0, 1, hour, minute))); }
+/** One day in the range strip, showing its session density at a glance. */
+function DayChip({
+  date,
+  count,
+  today,
+}: {
+  readonly date: string;
+  readonly count: number;
+  readonly today: boolean;
+}) {
+  const dots = Math.min(count, 3);
+  const label = `${formatDayLabel(date)}, ${count} ${count === 1 ? "session" : "sessions"}`;
+  const body = (
+    <>
+      <span className={`text-xs ${count > 0 ? "text-kumo-subtle" : "text-kumo-inactive"}`}>
+        {formatWeekdayShort(date)}
+      </span>
+      <span
+        className={`flex size-7 items-center justify-center rounded-full text-base font-medium tabular-nums ${
+          today ? "bg-kumo-brand text-white" : count > 0 ? "text-kumo-strong" : "text-kumo-inactive"
+        }`}
+      >
+        {formatDayNumber(date)}
+      </span>
+      <span aria-hidden="true" className="flex h-1 items-center gap-0.5">
+        {Array.from({ length: dots }, (_, index) => (
+          <span
+            key={index}
+            className={`size-1 rounded-full ${today ? "bg-kumo-brand" : "bg-kumo-fill"}`}
+          />
+        ))}
+      </span>
+    </>
+  );
+
+  if (count === 0) {
+    return (
+      <div aria-label={label} className="flex flex-col items-center gap-1 rounded-sm px-1 py-2">
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <a
+      href={`#day-${date}`}
+      aria-label={label}
+      className="flex flex-col items-center gap-1 rounded-sm px-1 py-2 hover:bg-kumo-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kumo-focus"
+    >
+      {body}
+    </a>
+  );
+}
+
+/** One session row on the day timeline. */
+function AgendaRow({
+  item,
+  range,
+  next,
+  past,
+}: {
+  readonly item: AgendaItem;
+  readonly range: { readonly from: string; readonly to: string };
+  readonly next: boolean;
+  readonly past: boolean;
+}) {
+  const { entry, occurrence } = item;
+  const duration = formatDuration(occurrence.startTime, occurrence.endTime);
+
+  return (
+    <Link
+      to="/timetable/$entryId"
+      params={{ entryId: entry.id }}
+      search={range}
+      className="group grid grid-cols-[4.5rem_0.75rem_minmax(0,1fr)_auto] items-stretch gap-x-3 px-4 py-3.5 hover:bg-kumo-tint focus-visible:relative focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-kumo-focus sm:px-5"
+    >
+      <p className="text-base leading-5 tabular-nums">
+        <time
+          dateTime={occurrence.startInstant}
+          className={past ? "text-kumo-inactive" : "font-medium text-kumo-strong"}
+        >
+          {formatTime(occurrence.startTime)}
+        </time>
+        <br />
+        <time dateTime={occurrence.endInstant} className={past ? "text-kumo-inactive" : "text-kumo-subtle"}>
+          {formatTime(occurrence.endTime)}
+        </time>
+      </p>
+
+      <span aria-hidden="true" className="relative flex justify-center">
+        <span className="absolute -top-3.5 -bottom-3.5 w-px bg-kumo-line" />
+        <span
+          className={`relative mt-1.5 size-2 rounded-full ring-4 ring-kumo-base group-hover:ring-kumo-tint ${
+            next ? "bg-kumo-brand" : past ? "bg-kumo-fill" : "bg-kumo-line"
+          }`}
+        />
+      </span>
+
+      <div className="min-w-0">
+        <p
+          className={`truncate text-base font-medium underline-offset-4 group-hover:underline ${
+            past ? "text-kumo-subtle" : "text-kumo-strong"
+          }`}
+        >
+          {entry.title}
+        </p>
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-kumo-subtle">
+          {entry.courseTitle ? (
+            <>
+              <span className="truncate">{entry.courseTitle}</span>
+              <span aria-hidden="true" className="h-3 w-px bg-kumo-line" />
+            </>
+          ) : null}
+          {duration ? <span className="tabular-nums">{duration}</span> : null}
+          {entry.kind === "weekly" ? (
+            <span className="flex items-center gap-1">
+              <span className="h-lh flex items-center">
+                <Repeat aria-hidden="true" size={12} />
+              </span>
+              Weekly
+            </span>
+          ) : null}
+          {next ? (
+            <span className="rounded-full bg-kumo-brand/12 px-1.5 py-0.5 font-medium text-kumo-brand">Next</span>
+          ) : null}
+        </div>
+      </div>
+
+      <span className="flex items-center self-center text-kumo-inactive">
+        <CaretRight
+          aria-hidden="true"
+          size={15}
+          weight="bold"
+          className="transition-transform duration-150 ease-out group-hover:translate-x-0.5 motion-reduce:transform-none motion-reduce:transition-none"
+        />
+      </span>
+    </Link>
+  );
+}

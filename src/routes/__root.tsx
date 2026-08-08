@@ -1,6 +1,7 @@
-import { HeadContent, Scripts, createRootRoute } from "@tanstack/react-router";
+import { HeadContent, Outlet, Scripts, createRootRoute, useRouterState } from "@tanstack/react-router";
 import { ClerkProvider } from "@clerk/tanstack-react-start";
 
+import { WorkspaceShell } from "../components/workspace-shell";
 import appCss from "../styles.css?url";
 
 export const Route = createRootRoute({
@@ -50,8 +51,20 @@ export const Route = createRootRoute({
       },
     ],
   }),
+  component: RootRoute,
   shellComponent: RootDocument,
 });
+
+const workspacePath = /^\/(canvas(?:\/|$)|courses(?:\/|$)|tasks(?:\/|$)|timetable(?:\/|$)|deadlines(?:\/|$)|notes(?:\/|$)|focus(?:\/|$))/;
+
+function RootRoute() {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const content = <Outlet />;
+
+  return workspacePath.test(pathname) ? (
+    <WorkspaceShell>{content}</WorkspaceShell>
+  ) : content;
+}
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (

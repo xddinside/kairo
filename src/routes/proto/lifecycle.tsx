@@ -89,7 +89,6 @@ function LifecycleApp() {
     <>
       <ProtoSwitcher />
       <Sidebar.Provider
-        animationDuration={0}
         collapsible="icon"
         style={
           {

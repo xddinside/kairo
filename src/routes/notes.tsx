@@ -90,10 +90,10 @@ function NotesRoute() {
       <main className="mx-auto w-full max-w-5xl px-4 py-6 pb-24 sm:px-6 md:py-8 lg:px-10">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <h1 className="text-2xl font-semibold text-kumo-strong">Notes</h1>
-          <Dialog.Root open={createOpen} onOpenChange={setCreateOpen}>
-            <Dialog.Trigger render={(props) => <Button {...props} onClick={(event) => { props.onClick?.(event); setErrors([]); }} icon={<Plus aria-hidden="true" size={16} weight="bold" />} className="active:scale-[0.96] transition-transform">Create Note</Button>} />
-            <Dialog className="max-h-[calc(100svh-2rem)] overflow-y-auto p-5 sm:max-w-3xl sm:p-6">
-              <div className="mb-5 flex items-center justify-between gap-4"><Dialog.Title className="text-xl font-semibold">Create Note</Dialog.Title><Dialog.Close aria-label="Close create Note" render={(props) => <Button {...props} title="Close create Note" variant="secondary" shape="square" icon={<X aria-hidden="true" size={18} />} />} /></div>
+          <Dialog.Root open={createOpen} disablePointerDismissal onOpenChange={(open) => { if (!pending || open) setCreateOpen(open); }}>
+            <Dialog.Trigger render={(props) => <Button {...props} onClick={(event) => { props.onClick?.(event); setErrors([]); }} icon={<Plus aria-hidden="true" size={16} weight="bold" />} className="active:scale-[0.96] transition-transform motion-reduce:active:scale-100">Create Note</Button>} />
+            <Dialog className="flex h-[calc(100svh-1rem)] w-[calc(100vw-1rem)] max-w-none flex-col overflow-hidden overscroll-contain p-0 sm:h-[min(90svh,56rem)] sm:w-[min(92vw,72rem)]">
+              <div className="flex shrink-0 items-center justify-between gap-4 border-b border-kumo-line px-4 py-3 sm:px-6"><Dialog.Title className="text-xl font-semibold">Create Note</Dialog.Title><Dialog.Close aria-label="Close Note editor" render={(props) => <Button {...props} title="Close Note editor" variant="secondary" shape="square" disabled={pending} className="min-h-11 min-w-11" icon={<X aria-hidden="true" size={18} />} />} /></div>
               <NoteForm courses={data.courses} errors={errors} pending={pending} onCancel={() => setCreateOpen(false)} onSubmit={create} />
             </Dialog>
           </Dialog.Root>

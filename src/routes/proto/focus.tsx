@@ -66,7 +66,6 @@ function FocusApp() {
     <>
       <PhaseSwitcher />
       <Sidebar.Provider
-        animationDuration={0}
         collapsible="icon"
         defaultOpen
         style={

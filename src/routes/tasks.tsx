@@ -1,18 +1,49 @@
-import { Badge } from "@cloudflare/kumo/components/badge";
 import { Button } from "@cloudflare/kumo/components/button";
 import { Dialog } from "@cloudflare/kumo/components/dialog";
+import { Empty } from "@cloudflare/kumo/components/empty";
 import { Input } from "@cloudflare/kumo/components/input";
+import { InputGroup } from "@cloudflare/kumo/components/input-group";
 import { LayerCard } from "@cloudflare/kumo/components/layer-card";
-import { ListChecks, MagnifyingGlass, Plus, X } from "@phosphor-icons/react";
+import { Select } from "@cloudflare/kumo/components/select";
+import { Tabs } from "@cloudflare/kumo/components/tabs";
+import { Text } from "@cloudflare/kumo/components/text";
+import {
+  ArrowRight,
+  CheckCircle,
+  CircleDashed,
+  CircleNotch,
+  Clock,
+  ListChecks,
+  MagnifyingGlass,
+  Plus,
+  X,
+} from "@phosphor-icons/react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
 
-import { AcademicError, AcademicLoading } from "../components/academic/academic-feedback";
-import { AcademicForm, type AcademicFormValues } from "../components/academic/academic-form";
+import {
+  AcademicError,
+  AcademicLoading,
+} from "../components/academic/academic-feedback";
+import {
+  AcademicForm,
+  type AcademicFormValues,
+} from "../components/academic/academic-form";
 import { AcademicShell } from "../components/academic/academic-shell";
-import type { AcademicFieldError, AssessmentOption, CourseOption } from "../server/academic/domain";
-import { createTask, listAssessmentOptions, listCourseOptions, listTasks } from "../server/academic/functions";
+import type {
+  AcademicFieldError,
+  AcademicStatus,
+  AssessmentOption,
+  CourseOption,
+  Task,
+} from "../server/academic/domain";
+import {
+  createTask,
+  listAssessmentOptions,
+  listCourseOptions,
+  listTasks,
+} from "../server/academic/functions";
 import { requireAuthenticatedRoute } from "../server/auth/functions";
 
 const searchSchema = z.object({
@@ -45,22 +76,461 @@ export const Route = createFileRoute("/tasks")({
 });
 
 function TasksRoute() {
-  const { page, courses, assessments } = Route.useLoaderData(); const search = Route.useSearch(); const navigate = Route.useNavigate();
-  const [open, setOpen] = useState(false); const [pending, setPending] = useState(false); const [errors, setErrors] = useState<ReadonlyArray<AcademicFieldError>>([]);
-  const create = async (values: AcademicFormValues) => { setPending(true); setErrors([]); try { const result = await createTask({ data: values }); if (result._tag === "invalid") setErrors(result.fields); else if ((result._tag === "applied" || result._tag === "already_applied") && result.value) { setOpen(false); sessionStorage.setItem("kairo.academic.notice", JSON.stringify({ message: "Task created.", token: result.undoToken })); await navigate({ to: "/tasks/$taskId", params: { taskId: result.value.id } }); } else setErrors([{ field: "form", message: result._tag === "not_found" ? "A selected course or assessment is no longer available." : "The task could not be created. Retry when ready." }]); } finally { setPending(false); } };
-  const submitSearch = (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); const q = String(new FormData(event.currentTarget).get("q") ?? "").trim(); void navigate({ search: (previous) => ({ ...previous, q: q || undefined, cursor: undefined }), replace: true }); };
-  const setFilter = (next: Record<string, string | undefined>) => void navigate({ search: (previous) => ({ ...previous, ...next, cursor: undefined }) });
+  const { page, courses, assessments } = Route.useLoaderData();
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [errors, setErrors] = useState<ReadonlyArray<AcademicFieldError>>([]);
+
+  const create = async (values: AcademicFormValues) => {
+    setPending(true);
+    setErrors([]);
+    try {
+      const result = await createTask({ data: values });
+      if (result._tag === "invalid") {
+        setErrors(result.fields);
+      } else if ((result._tag === "applied" || result._tag === "already_applied") && result.value) {
+        setOpen(false);
+        sessionStorage.setItem("kairo.academic.notice", JSON.stringify({ message: "Task created.", token: result.undoToken }));
+        await navigate({ to: "/tasks/$taskId", params: { taskId: result.value.id } });
+      } else {
+        setErrors([{ field: "form", message: result._tag === "not_found" ? "A selected course or assessment is no longer available." : "The task could not be created. Retry when ready." }]);
+      }
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const submitSearch = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const q = String(new FormData(event.currentTarget).get("q") ?? "").trim();
+    void navigate({ search: (previous) => ({ ...previous, q: q || undefined, cursor: undefined }), replace: true });
+  };
+
+  const setFilter = (next: Record<string, string | undefined>) =>
+    void navigate({ search: (previous) => ({ ...previous, ...next, cursor: undefined }) });
+
   const filtered = Boolean(search.q || search.courseId || search.assessment || search.status !== "open" || search.window !== "all");
-  return <AcademicShell><main className="mx-auto w-full max-w-5xl px-4 py-6 pb-24 sm:px-6 md:py-8 lg:px-10">
-    <div className="flex flex-wrap items-end justify-between gap-4"><h1 className="text-2xl font-semibold text-kumo-strong">Tasks</h1><Dialog.Root open={open} onOpenChange={setOpen}><Dialog.Trigger render={(props) => <Button {...props} icon={<Plus aria-hidden="true" size={16} />} className="min-h-11 transition-transform duration-150 ease-out active:scale-[0.96]">Create task</Button>} /><Dialog className="max-h-[calc(100svh-1rem)] overflow-y-auto p-5 sm:max-w-2xl sm:p-6"><div className="mb-5 flex items-center justify-between"><Dialog.Title className="text-xl font-semibold">Create task</Dialog.Title><Dialog.Close aria-label="Close create task" render={(props) => <Button {...props} title="Close create task" variant="secondary" shape="square" className="min-h-11 min-w-11" icon={<X aria-hidden="true" size={18} />} />} /></div><AcademicForm kind="task" courses={courses} assessments={assessments} errors={errors} pending={pending} onCancel={() => setOpen(false)} onSubmit={create} /></Dialog></Dialog.Root></div>
-    <div className="mt-6 grid gap-3"><form onSubmit={submitSearch} className="flex gap-2"><label htmlFor="task-search" className="sr-only">Search tasks</label><Input id="task-search" name="q" type="search" defaultValue={search.q ?? ""} placeholder="Search tasks" className="text-base sm:text-sm" /><Button type="submit" variant="secondary" shape="square" className="min-h-11 min-w-11" aria-label="Search tasks" icon={<MagnifyingGlass aria-hidden="true" size={18} />} /></form><div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6"><Select label="Status" value={search.status ?? "open"} onChange={(value) => setFilter({ status: value })} options={[["open", "Open"], ["completed", "Completed"], ["cancelled", "Cancelled"], ["all", "All statuses"]]} /><Select label="Course" value={search.courseId ?? ""} onChange={(value) => setFilter({ courseId: value || undefined })} options={[["", "All courses"], ...courses.map((course) => [course.id, course.title] as const)]} /><Select label="Assessment" value={search.assessment ?? ""} onChange={(value) => setFilter({ assessment: value || undefined })} options={[["", "All assessments"], ["none", "No assessment"], ...assessments.map((assessment) => [assessment.id, assessment.title] as const)]} /><Select label="Due" value={search.window ?? "all"} onChange={(value) => setFilter({ window: value })} options={[["all", "All dates"], ["next7", "Next seven days"], ["custom", "Custom range"]]} /><Select label="Sort" value={search.sort ?? "due_asc"} onChange={(value) => setFilter({ sort: value })} options={[["due_asc", "Due date"], ["updated_desc", "Recently updated"], ["title_asc", "Title"]]} /><Select label="Page size" value={String(search.pageSize ?? 25)} onChange={(value) => setFilter({ pageSize: value })} options={[["10", "10"], ["25", "25"], ["50", "50"], ["100", "100"]]} /></div>{search.window === "custom" ? <div className="grid gap-2 sm:grid-cols-2"><label className="grid gap-1 text-sm font-medium">From<Input type="date" value={search.from ?? ""} onChange={(event) => setFilter({ from: event.target.value || undefined })} /></label><label className="grid gap-1 text-sm font-medium">To<Input type="date" value={search.to ?? ""} onChange={(event) => setFilter({ to: event.target.value || undefined })} /></label></div> : null}</div>
-    <p role="status" className="mt-5 text-sm text-kumo-subtle">{page.items.length} {page.items.length === 1 ? "task" : "tasks"}{page.hasNext ? " on this page" : ""}</p>{page.invalidCursor ? <p role="status" className="mt-2 text-sm text-kumo-warning">That page link expired. Showing the first page.</p> : null}
-    {page.items.length === 0 ? <LayerCard className="mt-5 px-6 py-10 text-center"><ListChecks aria-hidden="true" size={28} className="mx-auto text-kumo-subtle" /><h2 className="mt-3 text-lg font-semibold">{filtered ? "No tasks match these filters" : "No tasks yet"}</h2><div className="mt-5 flex justify-center gap-2">{filtered ? <Button variant="secondary" onClick={() => void navigate({ search: {} })}>Clear filters</Button> : null}<Button onClick={() => setOpen(true)}>Create task</Button></div></LayerCard> : <LayerCard className="mt-5"><ol className="divide-y divide-kumo-line">{page.items.map((task) => <li key={task.id} className="grid gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-5"><div className="min-w-0"><Link to="/tasks/$taskId" params={{ taskId: task.id }} className="text-sm font-medium text-kumo-strong underline-offset-4 hover:underline">{task.title}</Link><div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-kumo-subtle">{task.courseTitle ? <span>{task.courseTitle}</span> : null}{task.dueDate ? <time dateTime={`${task.dueDate}${task.dueTime ? `T${task.dueTime}` : ""}`}>{formatDue(task.dueDate, task.dueTime)}</time> : <span>No due date</span>}<Badge variant="secondary">{task.status}</Badge></div></div><Link to="/tasks/$taskId" params={{ taskId: task.id }} className="flex min-h-11 items-center justify-center rounded-lg px-3 text-sm font-medium text-kumo-brand ring ring-kumo-line hover:bg-kumo-tint">View</Link></li>)}</ol></LayerCard>}
-    {page.hasNext && page.nextCursor ? <div className="mt-5 flex justify-end"><Button variant="secondary" onClick={() => void navigate({ search: (previous) => ({ ...previous, cursor: page.nextCursor ?? undefined }) })}>Next page</Button></div> : null}
-  </main></AcademicShell>;
+  const today = new Date().toISOString().slice(0, 10);
+
+  return (
+    <AcademicShell>
+      <main className="mx-auto w-full max-w-6xl px-4 py-8 pb-24 sm:px-6 md:py-12 lg:px-10">
+        <header className="flex items-start justify-between gap-5">
+          <div className="flex min-w-0 items-center gap-3.5">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-kumo-base text-kumo-brand shadow-sm ring ring-kumo-line">
+              <ListChecks aria-hidden="true" size={21} weight="regular" />
+            </span>
+            <div className="min-w-0">
+              <Text as="h1" variant="heading1">
+                Tasks
+              </Text>
+              <div className="mt-1 text-sm text-kumo-subtle tabular-nums">
+                {page.items.length} {page.items.length === 1 ? "task" : "tasks"}
+                {page.hasNext ? " on this page" : ""}
+              </div>
+            </div>
+          </div>
+          <Dialog.Root open={open} onOpenChange={setOpen}>
+            <Dialog.Trigger
+              render={(props) => (
+                <Button
+                  {...props}
+                  variant="primary"
+                  icon={<Plus aria-hidden="true" size={16} weight="bold" />}
+                  className="min-h-10 shrink-0 rounded-lg shadow-sm transition-transform duration-150 ease-out active:scale-[0.96]"
+                >
+                  Create task
+                </Button>
+              )}
+            />
+            <Dialog className="max-h-[calc(100svh-2rem)] overflow-y-auto p-5 sm:max-w-xl sm:p-6">
+              <div className="mb-5 flex items-center justify-between">
+                <Dialog.Title className="text-xl font-semibold">
+                  Create task
+                </Dialog.Title>
+                <Dialog.Close
+                  aria-label="Close create task"
+                  render={(props) => (
+                    <Button
+                      {...props}
+                      title="Close create task"
+                      variant="secondary"
+                      shape="square"
+                      className="min-h-10 min-w-10"
+                      icon={<X aria-hidden="true" size={18} />}
+                    />
+                  )}
+                />
+              </div>
+              <AcademicForm
+                kind="task"
+                courses={courses}
+                assessments={assessments}
+                errors={errors}
+                pending={pending}
+                onCancel={() => setOpen(false)}
+                onSubmit={create}
+              />
+            </Dialog>
+          </Dialog.Root>
+        </header>
+
+        <LayerCard className="mt-9">
+          <LayerCard.Primary className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+            <form
+              onSubmit={submitSearch}
+              role="search"
+              className="min-w-0 flex-1 sm:max-w-md"
+            >
+              <label htmlFor="task-search" className="sr-only">
+                Search tasks
+              </label>
+              <InputGroup size="lg">
+                <InputGroup.Addon>
+                  <MagnifyingGlass
+                    aria-hidden="true"
+                    size={17}
+                    className="text-kumo-subtle"
+                  />
+                </InputGroup.Addon>
+                <InputGroup.Input
+                  id="task-search"
+                  name="q"
+                  type="search"
+                  defaultValue={search.q ?? ""}
+                  placeholder="Search tasks"
+                />
+              </InputGroup>
+              <button type="submit" className="sr-only">
+                Search
+              </button>
+            </form>
+            <div role="group" aria-label="Task status" className="min-w-0">
+              <Tabs
+                variant="segmented"
+                size="sm"
+                value={search.status ?? "open"}
+                onValueChange={(status) => {
+                  setFilter({ status: status || "open" });
+                }}
+                tabs={[
+                  { value: "open", label: "Open" },
+                  { value: "completed", label: "Completed" },
+                  { value: "cancelled", label: "Cancelled" },
+                  { value: "all", label: "All" },
+                ]}
+              />
+            </div>
+          </LayerCard.Primary>
+          <LayerCard.Secondary className="flex flex-col gap-3 px-3 py-3 sm:px-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Select
+                aria-label="Course"
+                size="lg"
+                value={search.courseId ?? "all"}
+                onValueChange={(value) => {
+                  if (value === null) return;
+                  setFilter({ courseId: value === "all" ? undefined : value });
+                }}
+                items={{
+                  all: "All courses",
+                  ...Object.fromEntries(courses.map((course) => [course.id, course.title])),
+                }}
+                className="w-full"
+              />
+              <Select
+                aria-label="Assessment"
+                size="lg"
+                value={search.assessment ?? "all"}
+                onValueChange={(value) => {
+                  if (value === null) return;
+                  setFilter({
+                    assessment: value === "all" ? undefined : value,
+                  });
+                }}
+                items={{
+                  all: "All assessments",
+                  none: "No assessment",
+                  ...Object.fromEntries(assessments.map((assessment) => [assessment.id, assessment.title])),
+                }}
+                className="w-full"
+              />
+              <Select
+                aria-label="Due window"
+                size="lg"
+                value={search.window ?? "all"}
+                onValueChange={(value) => {
+                  if (value === null) return;
+                  setFilter({
+                    window: value,
+                    ...(value !== "custom" ? { from: undefined, to: undefined } : {}),
+                  });
+                }}
+                items={{
+                  all: "All dates",
+                  next7: "Next seven days",
+                  custom: "Custom range",
+                }}
+                className="w-full"
+              />
+              <Select
+                aria-label="Sort"
+                size="lg"
+                value={search.sort ?? "due_asc"}
+                onValueChange={(value) => {
+                  if (value === null) return;
+                  setFilter({ sort: value });
+                }}
+                items={{
+                  due_asc: "Due date",
+                  updated_desc: "Recently updated",
+                  title_asc: "Title",
+                }}
+                className="w-full"
+              />
+            </div>
+            {search.window === "custom" ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="grid gap-1.5 text-sm font-medium">
+                  From
+                  <Input
+                    type="date"
+                    defaultValue={search.from ?? ""}
+                    onChange={(event) => setFilter({ from: event.target.value || undefined })}
+                  />
+                </label>
+                <label className="grid gap-1.5 text-sm font-medium">
+                  To
+                  <Input
+                    type="date"
+                    defaultValue={search.to ?? ""}
+                    onChange={(event) => setFilter({ to: event.target.value || undefined })}
+                  />
+                </label>
+              </div>
+            ) : null}
+          </LayerCard.Secondary>
+        </LayerCard>
+
+        <section className="mt-9" aria-labelledby="task-list-heading">
+          <div className="mb-3 flex items-center justify-between px-1">
+            <Text as="h2" variant="heading3" id="task-list-heading">
+              Task list
+            </Text>
+            {filtered ? (
+              <button
+                type="button"
+                onClick={() => void navigate({ search: {} })}
+                className="min-h-9 rounded-lg px-3 text-sm font-medium text-kumo-brand hover:bg-kumo-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kumo-focus"
+              >
+                Clear filters
+              </button>
+            ) : null}
+          </div>
+
+          {page.invalidCursor ? (
+            <p role="status" className="mb-3 rounded-lg bg-kumo-warning-tint px-4 py-3 text-sm text-kumo-warning">
+              That page link expired. Showing the first page.
+            </p>
+          ) : null}
+
+          {page.items.length === 0 ? (
+            <LayerCard>
+              <Empty
+                size="base"
+                icon={
+                  filtered ? (
+                    <span className="flex size-12 items-center justify-center rounded-xl bg-kumo-tint text-kumo-subtle ring ring-kumo-line">
+                      <MagnifyingGlass aria-hidden="true" size={23} />
+                    </span>
+                  ) : (
+                    <span className="flex size-12 items-center justify-center rounded-xl bg-kumo-brand text-kumo-inverse shadow-sm">
+                      <ListChecks aria-hidden="true" size={23} />
+                    </span>
+                  )
+                }
+                title={filtered ? "No matching tasks" : "No tasks yet"}
+                contents={
+                  filtered ? (
+                    <Button
+                      variant="primary"
+                      onClick={() => void navigate({ search: {} })}
+                      className="transition-transform duration-150 ease-out active:scale-[0.96]"
+                    >
+                      Clear filters
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="primary"
+                      icon={<Plus aria-hidden="true" size={16} weight="bold" />}
+                      onClick={() => setOpen(true)}
+                      className="shadow-sm transition-transform duration-150 ease-out active:scale-[0.96]"
+                    >
+                      Create your first task
+                    </Button>
+                  )
+                }
+              />
+            </LayerCard>
+          ) : (
+            <LayerCard>
+              <ol className="divide-y divide-kumo-line">
+                {page.items.map((task) => (
+                  <TaskRow key={task.id} task={task} today={today} />
+                ))}
+              </ol>
+            </LayerCard>
+          )}
+
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 px-1">
+            <p role="status" className="text-sm text-kumo-subtle tabular-nums">
+              {page.items.length} {page.items.length === 1 ? "task" : "tasks"}
+              {page.hasNext ? " on this page" : ""}
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Select
+                aria-label="Results per page"
+                size="sm"
+                value={String(search.pageSize ?? 25)}
+                onValueChange={(value) => {
+                  if (value === null) return;
+                  void navigate({
+                    search: (previous) => ({
+                      ...previous,
+                      pageSize: Number(value),
+                      cursor: undefined,
+                    }),
+                  });
+                }}
+                items={{
+                  "10": "10 results",
+                  "25": "25 results",
+                  "50": "50 results",
+                  "100": "100 results",
+                }}
+                className="w-36"
+              />
+              {page.hasNext && page.nextCursor ? (
+                <Button
+                  variant="secondary"
+                  className="min-h-10 rounded-lg"
+                  onClick={() =>
+                    void navigate({
+                      search: (previous) => ({
+                        ...previous,
+                        cursor: page.nextCursor ?? undefined,
+                      }),
+                    })
+                  }
+                >
+                  Next page
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </section>
+      </main>
+    </AcademicShell>
+  );
 }
 
-function Select({ label, value, options, onChange }: { readonly label: string; readonly value: string; readonly options: ReadonlyArray<readonly [string, string]>; readonly onChange: (value: string) => void }) { return <label className="grid gap-1 text-sm font-medium">{label}<select value={value} onChange={(event) => onChange(event.target.value)} className="min-h-11 rounded-lg bg-kumo-base px-3 text-base ring ring-kumo-line focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kumo-focus sm:text-sm">{options.map(([key, text]) => <option key={key || "all"} value={key}>{text}</option>)}</select></label>; }
-function formatDue(date: string, time: string | null) { const day = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(`${date}T12:00:00Z`)); return time ? `${day} at ${time}` : day; }
-function isCourseOptions(value: unknown): value is ReadonlyArray<CourseOption> { return Array.isArray(value) && value.every((item) => typeof item === "object" && item !== null && "id" in item && "title" in item && !("status" in item)); }
-function isAssessmentOptions(value: unknown): value is ReadonlyArray<AssessmentOption> { return Array.isArray(value) && value.every((item) => typeof item === "object" && item !== null && "courseId" in item && !("status" in item)); }
+const STATUS_STYLES: Record<AcademicStatus, { readonly className: string; readonly icon: typeof ListChecks }> = {
+  open: {
+    className: "bg-kumo-brand-tint text-kumo-brand",
+    icon: CircleNotch,
+  },
+  completed: {
+    className: "bg-kumo-success-tint text-kumo-success",
+    icon: CheckCircle,
+  },
+  cancelled: {
+    className: "bg-kumo-fill text-kumo-subtle",
+    icon: CircleDashed,
+  },
+};
+
+function TaskRow({ task, today }: { readonly task: Task; readonly today: string }) {
+  const style = STATUS_STYLES[task.status];
+  const overdue = task.status === "open" && task.dueDate !== null && task.dueDate < today;
+  const Icon = style.icon;
+  const due = task.dueDate ? (
+    <time dateTime={`${task.dueDate}${task.dueTime ? `T${task.dueTime}` : ""}`}>
+      {formatDue(task.dueDate, task.dueTime)}
+    </time>
+  ) : (
+    <span>No due date</span>
+  );
+  return (
+    <li className="min-w-0">
+      <Link
+        to="/tasks/$taskId"
+        params={{ taskId: task.id }}
+        className="group flex min-w-0 items-center gap-4 px-4 py-4 outline-none transition-colors hover:bg-kumo-tint/40 focus-visible:ring-2 focus-visible:ring-kumo-focus/50 focus-visible:ring-offset-2 focus-visible:ring-offset-kumo-canvas sm:px-5"
+      >
+        <span
+          aria-hidden="true"
+          className={`flex size-10 shrink-0 items-center justify-center rounded-xl ring ring-kumo-line ${style.className}`}
+        >
+          <Icon size={18} weight="regular" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium text-kumo-strong underline-offset-4 group-hover:underline">
+            {task.title}
+          </span>
+          <span className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-kumo-subtle">
+            {task.courseTitle ? (
+              <span className="truncate font-medium text-kumo-default">
+                {task.courseTitle}
+              </span>
+            ) : (
+              <span>No course</span>
+            )}
+            <span className="flex items-center gap-1">
+              <Clock aria-hidden="true" size={13} />
+              <span className={overdue ? "text-kumo-danger" : ""}>{due}</span>
+            </span>
+            {overdue ? <span className="text-kumo-danger">Overdue</span> : null}
+          </span>
+        </span>
+        <span
+          aria-hidden="true"
+          className="flex size-9 shrink-0 items-center justify-center rounded-full bg-kumo-tint text-kumo-subtle ring ring-kumo-line transition-colors group-hover:bg-kumo-brand group-hover:text-kumo-inverse"
+        >
+          <ArrowRight
+            size={15}
+            weight="bold"
+            className="transition-transform duration-150 ease-out group-hover:translate-x-0.5 motion-reduce:transform-none motion-reduce:transition-none"
+          />
+        </span>
+      </Link>
+    </li>
+  );
+}
+
+function formatDue(date: string, time: string | null) {
+  const day = new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${date}T12:00:00Z`));
+  return time ? `${day} at ${formatTime(time)}` : day;
+}
+
+function formatTime(value: string) {
+  const [hour = 0, minute = 0] = value.split(":").map(Number);
+  return new Intl.DateTimeFormat("en", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(2000, 0, 1, hour, minute)));
+}
+
+function isCourseOptions(value: unknown): value is ReadonlyArray<CourseOption> {
+  return Array.isArray(value) && value.every((item) => typeof item === "object" && item !== null && "id" in item && "title" in item && !("status" in item));
+}
+function isAssessmentOptions(value: unknown): value is ReadonlyArray<AssessmentOption> {
+  return Array.isArray(value) && value.every((item) => typeof item === "object" && item !== null && "courseId" in item && !("status" in item));
+}

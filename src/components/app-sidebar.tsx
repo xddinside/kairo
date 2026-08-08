@@ -1,22 +1,9 @@
 import { Sidebar } from "@cloudflare/kumo/components/sidebar";
-import {
-  CalendarCheck,
-  CalendarDots,
-  FrameCorners,
-  ListChecks,
-  NoteBlank,
-  SidebarSimple,
-  Timer,
-} from "@phosphor-icons/react";
+import { FrameCorners, SidebarSimple } from "@phosphor-icons/react";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
-const navigation = [
-  { label: "Tasks", icon: ListChecks },
-  { label: "Timetable", icon: CalendarDots },
-  { label: "Deadlines", icon: CalendarCheck },
-  { label: "Notes", icon: NoteBlank },
-  { label: "Focus", icon: Timer },
-] as const;
+import { workspaceRoutes } from "./workspace-routes";
 
 type AppSidebarProps = {
   active?: "canvas" | "account";
@@ -29,6 +16,9 @@ export function AppSidebar({
   recentCanvases = [],
   footer,
 }: AppSidebarProps) {
+  const navigate = useNavigate();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+
   return (
     <Sidebar className="sticky top-0 hidden h-svh md:flex">
       <Sidebar.Header className="h-16 px-3 group-not-data-[state=collapsed]/sidebar:px-5">
@@ -44,38 +34,6 @@ export function AppSidebar({
 
       <Sidebar.Content>
         <nav aria-label="Main navigation">
-          <Sidebar.Group className="mb-1">
-            <Sidebar.Menu>
-              <Sidebar.MenuButton
-                active={active === "canvas"}
-                disabled
-                aria-current={active === "canvas" ? "page" : undefined}
-                icon={
-                  <FrameCorners
-                    aria-hidden="true"
-                    size={18}
-                    weight="regular"
-                    className={`shrink-0 ${
-                      active === "canvas"
-                        ? "text-kumo-brand"
-                        : "text-kumo-subtle"
-                    }`}
-                  />
-                }
-                className={`min-h-10 cursor-default text-lg font-medium ${
-                  active === "canvas"
-                    ? "bg-kumo-base text-kumo-strong shadow-xs ring ring-kumo-line"
-                    : "text-kumo-default hover:bg-transparent"
-                } disabled:opacity-100 group-data-[state=collapsed]/sidebar:size-8.5 group-data-[state=collapsed]/sidebar:min-h-8.5`}
-              >
-                <span className="min-w-0 flex-1 truncate">Canvas</span>
-                <span className="text-sm font-normal text-kumo-subtle">
-                  Today
-                </span>
-              </Sidebar.MenuButton>
-            </Sidebar.Menu>
-          </Sidebar.Group>
-
           {recentCanvases.length > 0 ? (
             <Sidebar.Group className="mb-1">
               <Sidebar.GroupLabel>Recent canvases</Sidebar.GroupLabel>
@@ -106,22 +64,30 @@ export function AppSidebar({
           <Sidebar.Group>
             <Sidebar.GroupLabel>Your work</Sidebar.GroupLabel>
             <Sidebar.Menu>
-              {navigation.map((item) => {
+              {workspaceRoutes.map((item) => {
                 const Icon = item.icon;
+                const current = active === "canvas" && (item.to === "/canvas" ? pathname === item.to : pathname.startsWith(item.to));
 
                 return (
                   <Sidebar.MenuButton
-                    key={item.label}
-                    disabled
+                    key={item.to}
+                    href={item.to}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      void navigate({ to: item.to });
+                    }}
+                    active={current}
+                    aria-current={current ? "page" : undefined}
+                    tooltip={item.label}
                     icon={
                       <Icon
                         aria-hidden="true"
                         size={18}
                         weight="regular"
-                        className="shrink-0 text-kumo-subtle"
+                        className={`shrink-0 ${current ? "text-kumo-brand" : "text-kumo-subtle"}`}
                       />
                     }
-                    className="min-h-10 cursor-default text-lg font-normal text-kumo-default disabled:opacity-100 hover:bg-transparent"
+                    className={`min-h-10 text-lg font-medium group-data-[state=collapsed]/sidebar:size-8.5 group-data-[state=collapsed]/sidebar:min-h-8.5 ${current ? "bg-kumo-base text-kumo-strong shadow-xs ring ring-kumo-line" : "text-kumo-default"}`}
                   >
                     {item.label}
                   </Sidebar.MenuButton>

@@ -84,7 +84,7 @@ export function CanvasHome() {
             variant="primary"
             size="base"
             type="submit"
-            disabled={pending || !prompt.trim()}
+            disabled={pending}
             className="shrink-0 rounded-full text-lg transition-transform duration-150 ease-out active:not-disabled:scale-[0.96]"
           >
             {pending ? "Saving" : "Generate"}
@@ -101,7 +101,7 @@ export function CanvasHome() {
           {visible.map((suggestion) => {
             const Icon = suggestion.icon;
             return (
-              <li key={suggestion.text} className="w-full">
+              <li key={suggestion.text}>
                 <div className="group flex items-center gap-2.5 rounded-md px-3 py-2 text-lg text-kumo-subtle hover:bg-kumo-tint hover:text-kumo-default">
                   <span className="flex h-lh items-center text-kumo-subtle group-hover:text-kumo-strong">
                     <Icon aria-hidden="true" size={18} weight="regular" />
