@@ -1,5 +1,11 @@
 ## Agent skills
 
+### Engineering skills
+
+- Effect work: load the `/effect` skill first (workflows, services, layers, schemas, configuration, schedules, streams, HTTP clients, tests).
+- Coding work: load `/coding-standards` before writing or changing code.
+- Subagents: direct them to the skills too, e.g. "use /effect /coding-standards and work on this: …".
+
 ### Issue tracker
 
 Issues live in this repository's GitHub Issues. See `docs/agents/issue-tracker.md`.

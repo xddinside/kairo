@@ -22,6 +22,7 @@ import { Route as ProtoIndexRouteImport } from './routes/proto/index'
 import { Route as ProtoCatalogRouteImport } from './routes/proto/catalog'
 import { Route as ProtoFocusRouteImport } from './routes/proto/focus'
 import { Route as ProtoLifecycleRouteImport } from './routes/proto/lifecycle'
+import { Route as SignInSplatRouteImport } from './routes/sign-in.$'
 import { Route as ProtoAIndexRouteImport } from './routes/proto/a/index'
 import { Route as ProtoATodayRouteImport } from './routes/proto/a/today'
 import { Route as ProtoBIndexRouteImport } from './routes/proto/b/index'
@@ -94,6 +95,11 @@ const ProtoLifecycleRoute = ProtoLifecycleRouteImport.update({
   path: '/proto/lifecycle',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SignInSplatRoute = SignInSplatRouteImport.update({
+  id: '/sign-in/$',
+  path: '/sign-in/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProtoAIndexRoute = ProtoAIndexRouteImport.update({
   id: '/proto/a/',
   path: '/proto/a/',
@@ -137,6 +143,7 @@ export interface FileRoutesByFullPath {
   '/proto/catalog': typeof ProtoCatalogRoute
   '/proto/focus': typeof ProtoFocusRoute
   '/proto/lifecycle': typeof ProtoLifecycleRoute
+  '/sign-in/$': typeof SignInSplatRoute
   '/canvas/': typeof CanvasIndexRoute
   '/proto/': typeof ProtoIndexRoute
   '/proto/a/today': typeof ProtoATodayRoute
@@ -157,6 +164,7 @@ export interface FileRoutesByTo {
   '/proto/catalog': typeof ProtoCatalogRoute
   '/proto/focus': typeof ProtoFocusRoute
   '/proto/lifecycle': typeof ProtoLifecycleRoute
+  '/sign-in/$': typeof SignInSplatRoute
   '/canvas': typeof CanvasIndexRoute
   '/proto': typeof ProtoIndexRoute
   '/proto/a/today': typeof ProtoATodayRoute
@@ -179,6 +187,7 @@ export interface FileRoutesById {
   '/proto/catalog': typeof ProtoCatalogRoute
   '/proto/focus': typeof ProtoFocusRoute
   '/proto/lifecycle': typeof ProtoLifecycleRoute
+  '/sign-in/$': typeof SignInSplatRoute
   '/canvas/': typeof CanvasIndexRoute
   '/proto/': typeof ProtoIndexRoute
   '/proto/a/today': typeof ProtoATodayRoute
@@ -202,6 +211,7 @@ export interface FileRouteTypes {
     | '/proto/catalog'
     | '/proto/focus'
     | '/proto/lifecycle'
+    | '/sign-in/$'
     | '/canvas/'
     | '/proto/'
     | '/proto/a/today'
@@ -222,6 +232,7 @@ export interface FileRouteTypes {
     | '/proto/catalog'
     | '/proto/focus'
     | '/proto/lifecycle'
+    | '/sign-in/$'
     | '/canvas'
     | '/proto'
     | '/proto/a/today'
@@ -243,6 +254,7 @@ export interface FileRouteTypes {
     | '/proto/catalog'
     | '/proto/focus'
     | '/proto/lifecycle'
+    | '/sign-in/$'
     | '/canvas/'
     | '/proto/'
     | '/proto/a/today'
@@ -264,6 +276,7 @@ export interface RootRouteChildren {
   ProtoCatalogRoute: typeof ProtoCatalogRoute
   ProtoFocusRoute: typeof ProtoFocusRoute
   ProtoLifecycleRoute: typeof ProtoLifecycleRoute
+  SignInSplatRoute: typeof SignInSplatRoute
   ProtoIndexRoute: typeof ProtoIndexRoute
   ProtoATodayRoute: typeof ProtoATodayRoute
   ProtoBTodayRoute: typeof ProtoBTodayRoute
@@ -366,6 +379,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtoLifecycleRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/sign-in/$': {
+      id: '/sign-in/$'
+      path: '/sign-in/$'
+      fullPath: '/sign-in/$'
+      preLoaderRoute: typeof SignInSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/proto/a/': {
       id: '/proto/a/'
       path: '/proto/a'
@@ -435,6 +455,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProtoCatalogRoute: ProtoCatalogRoute,
   ProtoFocusRoute: ProtoFocusRoute,
   ProtoLifecycleRoute: ProtoLifecycleRoute,
+  SignInSplatRoute: SignInSplatRoute,
   ProtoIndexRoute: ProtoIndexRoute,
   ProtoATodayRoute: ProtoATodayRoute,
   ProtoBTodayRoute: ProtoBTodayRoute,
@@ -448,10 +469,11 @@ export const routeTree = rootRouteImport
   ._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
+import type { startInstance } from './start.ts'
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
     router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
   }
 }

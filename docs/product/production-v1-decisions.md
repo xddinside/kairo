@@ -65,7 +65,7 @@ Kairo v1 must not depend on seeded data, fixed generated views, simulated action
 ## Notifications
 
 - Use in-app toasts for immediate feedback and reminders.
-- Support optional browser notifications delivered through the operating system.
+- Browser notifications are deferred out of v1; the v1 release ships in-app reminders only (see the notification contract and [Approve the reminder scheduler deployment tier](https://github.com/xddinside/kairo/issues/22)).
 - Email and native mobile push notifications are not required for v1.
 
 ## Responsive product

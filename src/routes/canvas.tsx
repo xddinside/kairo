@@ -3,8 +3,12 @@ import { Outlet, createFileRoute } from "@tanstack/react-router";
 import type { CSSProperties } from "react";
 
 import { AppSidebar } from "../components/app-sidebar";
+import { requireAuthenticatedRoute } from "../server/auth/functions";
 
-export const Route = createFileRoute("/canvas")({ component: CanvasShell });
+export const Route = createFileRoute("/canvas")({
+  beforeLoad: requireAuthenticatedRoute,
+  component: CanvasShell,
+});
 
 function CanvasShell() {
   return (

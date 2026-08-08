@@ -3,6 +3,9 @@
   "private": true,
   "type": "module",
   "packageManager": "bun@1.3.14",
+  "engines": {
+    "node": "24.x"
+  },
   "imports": {
     "#/*": "./src/*"
   },
@@ -12,31 +15,56 @@
     "typecheck": "tsc --noEmit",
     "check": "bun run generate-routes && bun run typecheck",
     "build": "vite build",
-    "preview": "portless kairo-preview vite preview"
+    "db:migrate": "tsx scripts/migrate.ts",
+    "preview": "PORTLESS_APP_PORT=4173 portless kairo-preview vite preview",
+    "test": "bun run test:unit && bun run test:integration && bun run test:database && bun run test:browser && bun run test:browser-isolation",
+    "test:unit": "vitest run test/unit",
+    "test:integration": "vitest run test/integration",
+    "test:database": "bun run test:database:preflight",
+    "test:database:preflight": "tsx scripts/run-database-tests.ts",
+    "test:browser": "tsx scripts/run-browser-tests.ts",
+    "test:browser-isolation": "tsx scripts/verify-browser-database-boundary.ts",
+    "test:preview": "tsx scripts/validate-preview.ts",
+    "test:release": "tsx scripts/validate-release.ts",
+    "verify:clean": "tsx scripts/verify-clean-checkout.ts"
   },
   "dependencies": {
+    "@clerk/tanstack-react-start": "1.4.29",
     "@cloudflare/kumo": "2.9.0",
+    "@effect/atom-react": "4.0.0-beta.105",
+    "@effect/opentelemetry": "4.0.0-beta.105",
     "@fontsource-variable/dm-sans": "5.3.0",
     "@json-render/core": "0.19.0",
     "@json-render/react": "0.19.0",
     "@phosphor-icons/react": "2.1.10",
     "@tanstack/react-router": "1.170.18",
     "@tanstack/react-start": "1.168.34",
+    "drizzle-orm": "0.45.2",
+    "effect": "4.0.0-beta.105",
+    "postgres": "3.4.9",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
     "@tailwindcss/vite": "4.3.3",
     "@tanstack/router-cli": "1.167.21",
     "@types/node": "22.20.1",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "@vitejs/plugin-react": "6.0.5",
+    "drizzle-kit": "0.31.10",
+    "embedded-postgres": "18.4.0-beta.17",
     "nitro": "^3.0.1-20260731-205209-52abde8a",
     "portless": "0.15.5",
     "tailwindcss": "4.3.3",
+    "tsx": "4.20.6",
     "typescript": "6.0.3",
-    "vite": "8.2.0"
-  }
+    "vite": "8.2.0",
+    "vitest": "4.1.10"
+  },
+  "trustedDependencies": [
+    "@embedded-postgres/linux-x64"
+  ]
 }
