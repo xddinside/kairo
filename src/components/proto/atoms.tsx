@@ -16,7 +16,7 @@ import {
 } from "./canvas-data";
 
 export type TodayRoute =
-  "/canvas/today" | "/proto/a/today" | "/proto/b/today" | "/proto/c/today";
+  "/proto/a/today" | "/proto/b/today" | "/proto/c/today";
 
 export const chipLinkClass =
   "text-lg text-kumo-default transition-transform hover:text-kumo-strong active:scale-[0.96]";

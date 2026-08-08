@@ -52,3 +52,6 @@ Thumbs.db
 # Local agent and migration state
 .scratch/
 todos.json
+
+# clerk configuration (can include secrets)
+/.clerk/

@@ -1,17 +1,10 @@
 import { Button } from "@cloudflare/kumo/components/button";
 import { Dialog } from "@cloudflare/kumo/components/dialog";
-import { CalendarCheck, CalendarDots, FrameCorners, List, ListChecks, NoteBlank, Timer, X } from "@phosphor-icons/react";
+import { List, X } from "@phosphor-icons/react";
 import { Link } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 
-const routes = [
-  { to: "/canvas", label: "Canvas", icon: FrameCorners },
-  { to: "/tasks", label: "Tasks", icon: ListChecks },
-  { to: "/timetable", label: "Timetable", icon: CalendarDots },
-  { to: "/deadlines", label: "Deadlines", icon: CalendarCheck },
-  { to: "/notes", label: "Notes", icon: NoteBlank },
-  { to: "/focus", label: "Focus", icon: Timer },
-] as const;
+import { workspaceRoutes as routes } from "../workspace-routes";
 
 /** Quiet Rail shell used by production Notes routes. */
 export function NoteShell({ children }: { readonly children: ReactNode }) {

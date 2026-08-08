@@ -13,7 +13,7 @@ import type { AcademicFieldError, Course } from "../server/academic/domain";
 import { archiveCourse, deleteCourse, getCourse, reopenCourse, undoAcademicCommand, updateCourse } from "../server/academic/functions";
 import { requireAuthenticatedRoute } from "../server/auth/functions";
 
-export const Route = createFileRoute("/courses/$courseId")({ beforeLoad: requireAuthenticatedRoute, loader: async ({ params }) => { const course = await getCourse({ data: params.courseId }); if (!isCourse(course)) throw notFound(); return course; }, component: CourseDetailRoute, notFoundComponent: () => <AcademicShell><main className="mx-auto max-w-3xl px-4 py-12"><h1 className="text-2xl font-semibold">Course not found</h1><Link to="/courses" className="mt-5 inline-flex min-h-11 items-center text-sm font-medium text-kumo-brand">Back to courses</Link></main></AcademicShell> });
+export const Route = createFileRoute("/courses_/$courseId")({ beforeLoad: requireAuthenticatedRoute, loader: async ({ params }) => { const course = await getCourse({ data: params.courseId }); if (!isCourse(course)) throw notFound(); return course; }, component: CourseDetailRoute, notFoundComponent: () => <AcademicShell><main className="mx-auto max-w-3xl px-4 py-12"><h1 className="text-2xl font-semibold">Course not found</h1><Link to="/courses" className="mt-5 inline-flex min-h-11 items-center text-sm font-medium text-kumo-brand">Back to courses</Link></main></AcademicShell> });
 
 function CourseDetailRoute() {
   const course = Route.useLoaderData(); const navigate = Route.useNavigate(); const router = useRouter();

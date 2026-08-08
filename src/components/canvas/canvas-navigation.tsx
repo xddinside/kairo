@@ -1,27 +1,85 @@
-import { DropdownMenu } from "@cloudflare/kumo/components/dropdown";
 import { Button } from "@cloudflare/kumo/components/button";
 import { Dialog } from "@cloudflare/kumo/components/dialog";
+import { DropdownMenu } from "@cloudflare/kumo/components/dropdown";
 import { Input } from "@cloudflare/kumo/components/input";
 import { Sidebar } from "@cloudflare/kumo/components/sidebar";
-import { Archive, DotsThree, FrameCorners, PencilSimple, Plus, Trash } from "@phosphor-icons/react";
+import {
+  Archive,
+  DotsThree,
+  FrameCorners,
+  List,
+  PencilSimple,
+  Plus,
+  SidebarSimple,
+  Trash,
+  X,
+} from "@phosphor-icons/react";
 import { Link, useRouter } from "@tanstack/react-router";
-import { startTransition, useState } from "react";
+import { startTransition, useState, type MouseEvent, type ReactNode } from "react";
 
 import type { CanvasSummary } from "../../server/canvas/domain";
-import { archiveCanvas, deleteCanvas, renameCanvas as renameCanvasRequest, restoreCanvas, searchCanvases } from "../../server/canvas/functions";
+import {
+  archiveCanvas,
+  deleteCanvas,
+  renameCanvas as renameCanvasRequest,
+  restoreCanvas,
+  searchCanvases,
+} from "../../server/canvas/functions";
+import { workRoutes } from "../workspace-routes";
+
+const menuButtonClass =
+  "min-h-10 text-lg font-normal text-kumo-default group-data-[state=collapsed]/sidebar:size-8.5 group-data-[state=collapsed]/sidebar:min-h-8.5";
+
+const activeClass = "bg-kumo-base text-kumo-strong shadow-xs ring ring-kumo-line";
+
+const mobileRowClass =
+  "flex min-h-11 flex-1 items-center gap-2.5 rounded-lg px-3 text-lg font-normal text-kumo-default hover:bg-kumo-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kumo-focus";
+
+/** Left click without a modifier key, which the router should handle in place. */
+const isRoutedClick = (event: MouseEvent<HTMLElement>): boolean =>
+  event.button === 0 &&
+  !event.metaKey &&
+  !event.ctrlKey &&
+  !event.shiftKey &&
+  !event.altKey;
+
+export type NextClass = {
+  readonly title: string;
+  readonly startTime: string;
+};
 
 type CanvasNavigationProps = {
   readonly currentCanvasId?: string;
   readonly recent: ReadonlyArray<CanvasSummary>;
+  readonly nextClass?: NextClass;
 };
 
+type MutateOperation = "archive" | "restore" | "delete" | "rename";
+
+type Mutate = (
+  canvas: CanvasSummary,
+  operation: MutateOperation,
+) => Promise<void>;
+
 /** Canvas navigation shared by desktop and mobile shells. */
-export function CanvasNavigation({ currentCanvasId, recent }: CanvasNavigationProps) {
+export function CanvasNavigation({
+  currentCanvasId,
+  recent,
+  nextClass,
+}: CanvasNavigationProps) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ReadonlyArray<CanvasSummary>>(recent);
   const [renameTarget, setRenameTarget] = useState<CanvasSummary>();
   const [renameValue, setRenameValue] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const navigate = (to: string) => (event: MouseEvent<HTMLElement>) => {
+    if (!isRoutedClick(event)) return;
+    event.preventDefault();
+    setMenuOpen(false);
+    void router.navigate({ to });
+  };
 
   const search = async (value: string) => {
     setQuery(value);
@@ -29,107 +87,348 @@ export function CanvasNavigation({ currentCanvasId, recent }: CanvasNavigationPr
       setResults(recent);
       return;
     }
-    setResults(await searchCanvases({ data: { query: value, state: "all", limit: 20 } }));
+    setResults(
+      await searchCanvases({ data: { query: value, state: "all", limit: 20 } }),
+    );
   };
 
-  const mutate = async (canvas: CanvasSummary, operation: "archive" | "restore" | "delete" | "rename") => {
-    const input = { canvasId: canvas.id, expectedVersion: canvas.version, clientRequestId: crypto.randomUUID() };
-    let result;
+  const mutate: Mutate = async (canvas, operation) => {
     if (operation === "rename") {
       setRenameTarget(canvas);
       setRenameValue(canvas.title ?? "Untitled canvas");
       return;
-    } else result = operation === "archive"
-      ? await archiveCanvas({ data: input })
-      : operation === "restore"
-        ? await restoreCanvas({ data: input })
-        : await deleteCanvas({ data: input });
-    if (result._tag === "applied") {
-      if (operation === "delete" && currentCanvasId === canvas.id) await router.navigate({ to: "/canvas" });
-      startTransition(() => void router.invalidate());
     }
+    const input = {
+      canvasId: canvas.id,
+      expectedVersion: canvas.version,
+      clientRequestId: crypto.randomUUID(),
+    };
+    const result =
+      operation === "archive"
+        ? await archiveCanvas({ data: input })
+        : operation === "restore"
+          ? await restoreCanvas({ data: input })
+          : await deleteCanvas({ data: input });
+    if (result._tag !== "applied") return;
+    if (operation === "delete" && currentCanvasId === canvas.id) {
+      await router.navigate({ to: "/canvas" });
+    }
+    startTransition(() => void router.invalidate());
   };
 
   const rename = async () => {
     if (!renameTarget || !renameValue.trim()) return;
-    const result = await renameCanvasRequest({ data: {
-      canvasId: renameTarget.id,
-      expectedVersion: renameTarget.version,
-      clientRequestId: crypto.randomUUID(),
-      title: renameValue.trim(),
-    } });
-    if (result._tag === "applied") {
-      setRenameTarget(undefined);
-      startTransition(() => void router.invalidate());
-    }
+    const result = await renameCanvasRequest({
+      data: {
+        canvasId: renameTarget.id,
+        expectedVersion: renameTarget.version,
+        clientRequestId: crypto.randomUUID(),
+        title: renameValue.trim(),
+      },
+    });
+    if (result._tag !== "applied") return;
+    setRenameTarget(undefined);
+    startTransition(() => void router.invalidate());
   };
 
   const items = results.slice(0, 8);
+
+  const searchField = (size: "sm" | "base") => (
+    <Input
+      size={size}
+      value={query}
+      onChange={(event) => void search(event.target.value)}
+      placeholder="Search canvases"
+      aria-label="Search canvases"
+    />
+  );
+
   return (
     <>
       <Sidebar className="sticky top-0 hidden h-svh md:flex">
-        <Sidebar.Header className="h-16 px-4">
-          <img src="/brand/kairo-primary.svg" alt="Kairo" className="h-6 w-auto" />
-          <Sidebar.Trigger className="ms-auto size-9" />
+        <Sidebar.Header className="h-16 px-3 group-not-data-[state=collapsed]/sidebar:px-5">
+          <img
+            src="/brand/kairo-primary.svg"
+            alt="Kairo"
+            className="h-6 w-auto shrink-0 group-data-[state=collapsed]/sidebar:hidden"
+          />
+          <Sidebar.Trigger className="ms-auto size-9 group-data-[state=collapsed]/sidebar:mx-auto">
+            <SidebarSimple aria-hidden="true" size={18} weight="regular" />
+          </Sidebar.Trigger>
         </Sidebar.Header>
+
         <Sidebar.Content>
-          <Sidebar.Group>
-            <Sidebar.Menu>
-              <Sidebar.MenuButton
-                href="/canvas"
-                active={!currentCanvasId}
-                icon={<Plus aria-hidden="true" size={18} />}
-                className="min-h-10 w-full text-base font-medium"
-              >
-                New canvas
-              </Sidebar.MenuButton>
-            </Sidebar.Menu>
-          </Sidebar.Group>
-          <Sidebar.Group>
-            <Sidebar.GroupLabel>Recent canvases</Sidebar.GroupLabel>
-            <div className="px-2 pb-2">
-              <Input
-                size="sm"
-                value={query}
-                onChange={(event) => void search(event.target.value)}
-                placeholder="Search canvases"
-                aria-label="Search canvases"
-              />
-            </div>
-            <CanvasList currentCanvasId={currentCanvasId} items={items} onMutate={mutate} />
-          </Sidebar.Group>
+          <nav aria-label="Main navigation">
+            <Sidebar.Group className="mb-1">
+              <Sidebar.Menu>
+                <Sidebar.MenuButton
+                  href="/canvas"
+                  onClick={navigate("/canvas")}
+                  active={!currentCanvasId}
+                  aria-current={!currentCanvasId ? "page" : undefined}
+                  tooltip="New canvas"
+                  icon={
+                    <Plus
+                      aria-hidden="true"
+                      size={18}
+                      weight="regular"
+                      className={`shrink-0 ${!currentCanvasId ? "text-kumo-brand" : "text-kumo-subtle"}`}
+                    />
+                  }
+                  className={`min-h-10 text-lg font-medium ${
+                    !currentCanvasId ? activeClass : "text-kumo-default"
+                  } group-data-[state=collapsed]/sidebar:size-8.5 group-data-[state=collapsed]/sidebar:min-h-8.5`}
+                >
+                  New canvas
+                </Sidebar.MenuButton>
+              </Sidebar.Menu>
+            </Sidebar.Group>
+
+            <Sidebar.Group className="mb-1">
+              <Sidebar.GroupLabel>Recent canvases</Sidebar.GroupLabel>
+              <div className="px-2 pb-2 group-data-[state=collapsed]/sidebar:hidden">
+                {searchField("sm")}
+              </div>
+              {items.length === 0 ? (
+                <EmptyCanvases className="group-data-[state=collapsed]/sidebar:hidden" />
+              ) : (
+                <Sidebar.Menu>
+                  {items.map((canvas) => {
+                    const title = canvas.title ?? "Untitled canvas";
+                    const current = currentCanvasId === canvas.id;
+                    return (
+                      <Sidebar.MenuItem
+                        key={canvas.id}
+                        className="group/item flex items-center"
+                      >
+                        <Sidebar.MenuButton
+                          href={`/canvas/${canvas.id}`}
+                          onClick={navigate(`/canvas/${canvas.id}`)}
+                          active={current}
+                          aria-current={current ? "page" : undefined}
+                          tooltip={title}
+                          icon={
+                            <FrameCorners
+                              aria-hidden="true"
+                              size={18}
+                              weight="regular"
+                              className={`shrink-0 ${current ? "text-kumo-brand" : "text-kumo-subtle"}`}
+                            />
+                          }
+                          className={`min-w-0 flex-1 ${menuButtonClass} ${current ? activeClass : ""}`}
+                        >
+                          <span className="min-w-0 flex-1 truncate">{title}</span>
+                        </Sidebar.MenuButton>
+                        <CanvasActions
+                          canvas={canvas}
+                          title={title}
+                          onMutate={mutate}
+                          className="group-data-[state=collapsed]/sidebar:hidden"
+                        />
+                      </Sidebar.MenuItem>
+                    );
+                  })}
+                </Sidebar.Menu>
+              )}
+            </Sidebar.Group>
+
+            <Sidebar.Group>
+              <Sidebar.GroupLabel>Your work</Sidebar.GroupLabel>
+              <Sidebar.Menu>
+                {workRoutes.map(({ to, label, icon: Icon }) => (
+                  <Sidebar.MenuButton
+                    key={to}
+                    href={to}
+                    onClick={navigate(to)}
+                    tooltip={label}
+                    icon={
+                      <Icon
+                        aria-hidden="true"
+                        size={18}
+                        weight="regular"
+                        className="shrink-0 text-kumo-subtle"
+                      />
+                    }
+                    className={menuButtonClass}
+                  >
+                    {label}
+                  </Sidebar.MenuButton>
+                ))}
+              </Sidebar.Menu>
+            </Sidebar.Group>
+          </nav>
         </Sidebar.Content>
+
+        <Sidebar.Footer className="h-auto items-stretch px-3 py-3">
+          <NextClassCard nextClass={nextClass} />
+        </Sidebar.Footer>
       </Sidebar>
 
       <header className="sticky top-0 z-30 flex min-h-14 items-center gap-3 border-b border-kumo-line bg-kumo-canvas px-4 md:hidden">
-        <Link to="/canvas" aria-label="New canvas" className="flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-medium">
-          <FrameCorners aria-hidden="true" size={18} className="text-kumo-brand" />
-          Canvas
+        <Link
+          to="/canvas"
+          aria-label="Kairo canvas"
+          className="flex min-h-11 items-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kumo-focus"
+        >
+          <img src="/brand/kairo-primary.svg" alt="Kairo" className="h-6 w-auto" />
         </Link>
-        <details className="group ms-auto">
-          <summary className="flex min-h-11 cursor-pointer list-none items-center rounded-lg px-3 text-sm font-medium hover:bg-kumo-tint">Canvases</summary>
-          <div className="absolute inset-x-3 top-13 rounded-xl bg-kumo-base px-3 py-3 shadow-lg ring ring-kumo-line">
-            <Input
-              size="base"
-              value={query}
-              onChange={(event) => void search(event.target.value)}
-              placeholder="Search canvases"
-              aria-label="Search canvases"
-            />
-            <div className="mt-2 max-h-[50svh] overflow-y-auto">
-              <CanvasList currentCanvasId={currentCanvasId} items={items} onMutate={mutate} />
+        <Dialog.Root open={menuOpen} onOpenChange={setMenuOpen}>
+          <Dialog.Trigger
+            render={(props) => (
+              <Button
+                {...props}
+                title="Open navigation menu"
+                variant="secondary"
+                className="ms-auto min-h-11 transition-transform duration-150 ease-out active:scale-[0.96]"
+                icon={<List aria-hidden="true" size={18} />}
+              >
+                Menu
+              </Button>
+            )}
+          />
+          <Dialog className="inset-y-2 end-2 start-auto m-0 flex h-[calc(100svh-1rem)] w-[min(22rem,calc(100vw-1rem))] translate-x-0 translate-y-0 flex-col rounded-xl p-4">
+            <div className="flex items-center justify-between gap-4">
+              <Dialog.Title className="text-lg font-semibold">
+                Navigation
+              </Dialog.Title>
+              <Dialog.Close
+                aria-label="Close navigation menu"
+                render={(props) => (
+                  <Button
+                    {...props}
+                    title="Close navigation menu"
+                    variant="secondary"
+                    shape="square"
+                    className="min-h-11 min-w-11"
+                    icon={<X aria-hidden="true" size={18} />}
+                  />
+                )}
+              />
             </div>
-          </div>
-        </details>
+
+            <nav
+              aria-label="Mobile navigation"
+              className="mt-5 flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto"
+            >
+              <Link
+                to="/canvas"
+                onClick={() => setMenuOpen(false)}
+                aria-current={!currentCanvasId ? "page" : undefined}
+                className={`flex min-h-11 items-center gap-2.5 rounded-lg px-3 text-lg font-medium ${
+                  !currentCanvasId ? activeClass : "text-kumo-default hover:bg-kumo-tint"
+                }`}
+              >
+                <Plus
+                  aria-hidden="true"
+                  size={18}
+                  className={!currentCanvasId ? "text-kumo-brand" : "text-kumo-subtle"}
+                />
+                New canvas
+              </Link>
+
+              <div className="grid gap-2">
+                <MobileGroupLabel>Recent canvases</MobileGroupLabel>
+                {searchField("base")}
+                {items.length === 0 ? (
+                  <EmptyCanvases />
+                ) : (
+                  <ul className="grid gap-1">
+                    {items.map((canvas) => {
+                      const title = canvas.title ?? "Untitled canvas";
+                      const current = currentCanvasId === canvas.id;
+                      return (
+                        <li key={canvas.id} className="flex items-center gap-1">
+                          <Link
+                            to="/canvas/$canvasId"
+                            params={{ canvasId: canvas.id }}
+                            onClick={() => setMenuOpen(false)}
+                            aria-current={current ? "page" : undefined}
+                            className={`${mobileRowClass} min-w-0 ${current ? activeClass : ""}`}
+                          >
+                            <FrameCorners
+                              aria-hidden="true"
+                              size={18}
+                              className={
+                                current ? "shrink-0 text-kumo-brand" : "shrink-0 text-kumo-subtle"
+                              }
+                            />
+                            <span className="min-w-0 flex-1 truncate">{title}</span>
+                          </Link>
+                          <CanvasActions
+                            canvas={canvas}
+                            title={title}
+                            onMutate={mutate}
+                            onSelect={() => setMenuOpen(false)}
+                          />
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+
+              <div className="grid gap-2">
+                <MobileGroupLabel>Your work</MobileGroupLabel>
+                <ul className="grid gap-1">
+                  {workRoutes.map(({ to, label, icon: Icon }) => (
+                    <li key={to}>
+                      <Link
+                        to={to}
+                        onClick={() => setMenuOpen(false)}
+                        activeProps={{
+                          "aria-current": "page",
+                          className: activeClass,
+                        }}
+                        className={mobileRowClass}
+                      >
+                        <Icon
+                          aria-hidden="true"
+                          size={18}
+                          className="shrink-0 text-kumo-subtle"
+                        />
+                        {label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="mt-auto pt-2">
+                <NextClassCard nextClass={nextClass} />
+              </div>
+            </nav>
+          </Dialog>
+        </Dialog.Root>
       </header>
 
-      <Dialog.Root open={Boolean(renameTarget)} onOpenChange={(open) => { if (!open) setRenameTarget(undefined); }}>
+      <Dialog.Root
+        open={Boolean(renameTarget)}
+        onOpenChange={(open) => {
+          if (!open) setRenameTarget(undefined);
+        }}
+      >
         <Dialog className="p-5 sm:max-w-md">
-          <Dialog.Title className="text-lg font-semibold">Rename canvas</Dialog.Title>
-          <Input className="mt-5" value={renameValue} onChange={(event) => setRenameValue(event.target.value)} label="Canvas name" autoFocus />
+          <Dialog.Title className="text-lg font-semibold">
+            Rename canvas
+          </Dialog.Title>
+          <Input
+            className="mt-5"
+            value={renameValue}
+            onChange={(event) => setRenameValue(event.target.value)}
+            label="Canvas name"
+            autoFocus
+          />
           <div className="mt-5 flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setRenameTarget(undefined)}>Cancel</Button>
-            <Button disabled={!renameValue.trim()} onClick={() => void rename()} className="transition-transform active:not-disabled:scale-[0.96]">Save</Button>
+            <Button variant="secondary" onClick={() => setRenameTarget(undefined)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!renameValue.trim()}
+              onClick={() => void rename()}
+              className="transition-transform duration-150 ease-out active:not-disabled:scale-[0.96]"
+            >
+              Save
+            </Button>
           </div>
         </Dialog>
       </Dialog.Root>
@@ -137,46 +436,98 @@ export function CanvasNavigation({ currentCanvasId, recent }: CanvasNavigationPr
   );
 }
 
-function CanvasList({ currentCanvasId, items, onMutate }: {
-  readonly currentCanvasId?: string;
-  readonly items: ReadonlyArray<CanvasSummary>;
-  readonly onMutate: (canvas: CanvasSummary, operation: "archive" | "restore" | "delete" | "rename") => Promise<void>;
-}) {
-  if (items.length === 0) return <p className="px-3 py-4 text-sm text-kumo-subtle">No canvases found</p>;
+function MobileGroupLabel({ children }: { readonly children: ReactNode }) {
   return (
-    <Sidebar.Menu>
-      {items.map((canvas) => (
-        <Sidebar.MenuItem key={canvas.id} className="group/item flex items-center">
-          <Sidebar.MenuButton
-            href={`/canvas/${canvas.id}`}
-            active={currentCanvasId === canvas.id}
-            icon={<FrameCorners aria-hidden="true" size={18} className="text-kumo-subtle" />}
-            className="min-h-10 min-w-0 flex-1 text-base font-normal"
-          >
-            <span className="truncate">{canvas.title ?? "Untitled canvas"}</span>
-          </Sidebar.MenuButton>
-          <DropdownMenu>
-            <DropdownMenu.Trigger
-              aria-label={`Actions for ${canvas.title ?? "Untitled canvas"}`}
-              className="me-1 flex size-9 shrink-0 items-center justify-center rounded-lg text-kumo-subtle hover:bg-kumo-tint focus-visible:outline-2 focus-visible:outline-kumo-focus"
-            >
-              <DotsThree aria-hidden="true" size={18} weight="bold" />
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Content>
-              <DropdownMenu.Item icon={<PencilSimple aria-hidden="true" />} onClick={() => void onMutate(canvas, "rename")}>
-                Rename
-              </DropdownMenu.Item>
-              <DropdownMenu.Item icon={<Archive aria-hidden="true" />} onClick={() => void onMutate(canvas, canvas.state === "archived" ? "restore" : "archive")}>
-                {canvas.state === "archived" ? "Restore" : "Archive"}
-              </DropdownMenu.Item>
-              <DropdownMenu.Separator />
-              <DropdownMenu.Item variant="danger" icon={<Trash aria-hidden="true" />} onClick={() => void onMutate(canvas, "delete")}>
-                Delete
-              </DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu>
-        </Sidebar.MenuItem>
-      ))}
-    </Sidebar.Menu>
+    <p className="px-3 text-xs font-medium text-kumo-subtle">{children}</p>
+  );
+}
+
+function EmptyCanvases({ className = "" }: { readonly className?: string }) {
+  return (
+    <p className={`px-3 py-4 text-base text-kumo-subtle ${className}`}>
+      No canvases found
+    </p>
+  );
+}
+
+function CanvasActions({
+  canvas,
+  title,
+  onMutate,
+  onSelect,
+  className = "",
+}: {
+  readonly canvas: CanvasSummary;
+  readonly title: string;
+  readonly onMutate: Mutate;
+  readonly onSelect?: () => void;
+  readonly className?: string;
+}) {
+  const run = (operation: MutateOperation) => () => {
+    onSelect?.();
+    void onMutate(canvas, operation);
+  };
+  return (
+    <DropdownMenu>
+      <DropdownMenu.Trigger
+        aria-label={`Actions for ${title}`}
+        className={`me-1 flex size-9 shrink-0 items-center justify-center rounded-lg text-kumo-subtle hover:bg-kumo-tint focus-visible:outline-2 focus-visible:outline-kumo-focus ${className}`}
+      >
+        <DotsThree aria-hidden="true" size={18} weight="bold" />
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content>
+        <DropdownMenu.Item
+          icon={<PencilSimple aria-hidden="true" />}
+          onClick={run("rename")}
+        >
+          Rename
+        </DropdownMenu.Item>
+        <DropdownMenu.Item
+          icon={<Archive aria-hidden="true" />}
+          onClick={run(canvas.state === "archived" ? "restore" : "archive")}
+        >
+          {canvas.state === "archived" ? "Restore" : "Archive"}
+        </DropdownMenu.Item>
+        <DropdownMenu.Separator />
+        <DropdownMenu.Item
+          variant="danger"
+          icon={<Trash aria-hidden="true" />}
+          onClick={run("delete")}
+        >
+          Delete
+        </DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu>
+  );
+}
+
+function NextClassCard({ nextClass }: { readonly nextClass?: NextClass }) {
+  const today = new Date().toLocaleDateString(undefined, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+  return (
+    <div className="w-full rounded-lg bg-kumo-base px-3 py-2.5 shadow-xs ring ring-kumo-line group-data-[state=collapsed]/sidebar:hidden">
+      <div className="flex items-center justify-between gap-2 text-sm">
+        <span className="font-medium text-kumo-default">Today</span>
+        <span className="text-kumo-subtle tabular-nums">{today}</span>
+      </div>
+      <div className="mt-2 flex items-center gap-2 text-base font-medium text-kumo-default">
+        {nextClass ? (
+          <>
+            <span
+              aria-hidden="true"
+              className="size-1.5 shrink-0 rounded-full bg-kumo-success"
+            />
+            <span className="min-w-0 truncate">
+              {nextClass.title} at {nextClass.startTime}
+            </span>
+          </>
+        ) : (
+          <span className="text-kumo-subtle">Nothing left today</span>
+        )}
+      </div>
+    </div>
   );
 }

@@ -1,15 +1,7 @@
 import { Link } from "@tanstack/react-router";
-import { CalendarCheck, CalendarDots, FrameCorners, ListChecks, NoteBlank, Timer } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 
-const routes = [
-  { to: "/canvas", label: "Canvas", icon: FrameCorners },
-  { to: "/tasks", label: "Tasks", icon: ListChecks },
-  { to: "/timetable", label: "Timetable", icon: CalendarDots },
-  { to: "/deadlines", label: "Deadlines", icon: CalendarCheck },
-  { to: "/notes", label: "Notes", icon: NoteBlank },
-  { to: "/focus", label: "Focus", icon: Timer },
-] as const;
+import { workspaceRoutes as routes } from "../workspace-routes";
 
 /** Quiet Rail shell used by production Timetable routes. */
 export function TimetableShell({ children }: { readonly children: ReactNode }) {

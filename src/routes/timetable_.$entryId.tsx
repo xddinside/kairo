@@ -15,7 +15,7 @@ import type { TimetableCommandResult, TimetableFieldError } from "../server/time
 
 const detailSearch = z.object({ from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().catch(undefined), to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().catch(undefined) });
 
-export const Route = createFileRoute("/timetable/$entryId")({
+export const Route = createFileRoute("/timetable_/$entryId")({
   beforeLoad: requireAuthenticatedRoute,
   validateSearch: detailSearch,
   loaderDeps: ({ search }) => search,

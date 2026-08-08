@@ -16,7 +16,7 @@ import { deleteNote, getNote, listNoteCourses, undoNoteCommand, updateNote } fro
 
 const detailSearch = z.object({ mode: z.enum(["view", "edit"]).optional().catch("view") });
 
-export const Route = createFileRoute("/notes/$noteId")({
+export const Route = createFileRoute("/notes_/$noteId")({
   beforeLoad: requireAuthenticatedRoute,
   validateSearch: detailSearch,
   loader: async ({ params }) => {
